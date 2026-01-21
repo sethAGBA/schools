@@ -1,0 +1,5336 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:ui' show FontFeature;
+import 'package:school_manager/constants/colors.dart';
+import 'package:school_manager/screens/dashboard_home.dart';
+
+import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/models/class.dart';
+import 'package:school_manager/models/staff.dart';
+import 'package:school_manager/models/course.dart';
+import 'package:school_manager/models/timetable_entry.dart';
+import 'package:school_manager/services/pdf_service.dart';
+import 'package:school_manager/services/scheduling_service.dart';
+import 'package:school_manager/models/school_info.dart';
+import 'package:school_manager/utils/academic_year.dart';
+import 'package:school_manager/utils/timetable_prefs.dart' as ttp;
+import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
+import 'package:excel/excel.dart' hide Border;
+import 'dart:io';
+import 'package:open_file/open_file.dart';
+import 'package:file_picker/file_picker.dart';
+
+class TimetablePage extends StatefulWidget {
+  const TimetablePage({Key? key}) : super(key: key);
+
+  @override
+  State<TimetablePage> createState() => _TimetablePageState();
+}
+
+class _TimetablePageState extends State<TimetablePage>
+    with SingleTickerProviderStateMixin {
+  late final TextEditingController _searchController;
+  late final FocusNode _searchFocusNode;
+  String _searchQuery = '';
+
+  String? _selectedClassKey;
+  String? _selectedTeacherFilter;
+  bool _isClassView = true;
+
+  List<Class> _classes = [];
+  List<Staff> _teachers = [];
+  List<Course> _subjects = [];
+  List<TimetableEntry> _timetableEntries =
+      []; // Add this line to define the timetable entries
+  SchoolInfo? _schoolInfo;
+
+  // Label de l'année académique courante (ex: "2025-2026"). Nullable pour compatibilité.
+  String? _currentAcademicYearLabel;
+
+  String _resolveEffectiveAcademicYear({required String fallback}) {
+    final selected = academicYearNotifier.value.trim();
+    if (selected.isNotEmpty) return selected;
+    return fallback;
+  }
+
+  void _onAcademicYearChanged() {
+    _loadData();
+  }
+
+  Future<String> _effectiveAcademicYear() async {
+    final cached = (_currentAcademicYearLabel ?? '').trim();
+    if (cached.isNotEmpty) return cached;
+    final selected = academicYearNotifier.value.trim();
+    if (selected.isNotEmpty) return selected;
+    return getCurrentAcademicYear();
+  }
+
+  String _classKey(Class c) => '${c.name}:::${c.academicYear}';
+  String _classKeyFromValues(String name, String academicYear) =>
+      '$name:::${academicYear}';
+  String _classLabel(Class c) => '${c.name} (${c.academicYear})';
+  Class? _classFromKey(String? key) {
+    if (key == null) return null;
+    final parts = key.split(':::');
+    if (parts.length != 2) return null;
+    final name = parts.first;
+    final year = parts.last;
+    for (final c in _classes) {
+      if (c.name == name && c.academicYear == year) {
+        return c;
+      }
+    }
+    return null;
+  }
+
+  final List<String> _daysOfWeek = List.of(ttp.kDefaultDays);
+
+  final List<String> _timeSlots = List.of(ttp.kDefaultSlots);
+  Set<String> _breakSlots = <String>{};
+  Map<String, Set<String>> _classBreakSlotsMap = <String, Set<String>>{};
+  // Auto-generation settings
+  final TextEditingController _morningStartCtrl = TextEditingController();
+  final TextEditingController _morningEndCtrl = TextEditingController();
+  final TextEditingController _afternoonStartCtrl = TextEditingController();
+  final TextEditingController _afternoonEndCtrl = TextEditingController();
+  final TextEditingController _sessionMinutesCtrl = TextEditingController(text: '60');
+  final TextEditingController _sessionsPerSubjectCtrl = TextEditingController(text: '1');
+  final TextEditingController _teacherMaxPerDayCtrl = TextEditingController(text: '0');
+  final TextEditingController _classMaxPerDayCtrl = TextEditingController(text: '0');
+  final TextEditingController _subjectMaxPerDayCtrl = TextEditingController(text: '0');
+  final TextEditingController _optionalMaxMinutesCtrl = TextEditingController(text: '120');
+  bool _clearBeforeGen = false;
+  bool _isGenerating = false;
+  bool _saturateAll = false;
+  bool _capTwoHourBlocksWeekly = true;
+  Set<String> _excludedFromTwoHourCap = <String>{};
+  // Affichage
+  bool _showSummaries = false; // résumés masqués par défaut pour maximiser l'espace
+  bool _showClassList = true;  // panneau de classes visible par défaut
+  bool _fullscreen = false;    // plein écran désactivé par défaut
+  double _gridZoom = 1.0;      // zoom de la grille (1.0 = 100%)
+  double _leftPanelWidth = 200.0; // largeur panneau classes
+  bool _tourSeen = false;      // tour guidé déjà vu ?
+  // Block sizing settings
+  final TextEditingController _blockDefaultCtrl = TextEditingController(text: '2');
+  final TextEditingController _threeHourThresholdCtrl = TextEditingController(text: '1.5');
+
+  final DatabaseService _dbService = DatabaseService();
+  late final SchedulingService _scheduling;
+  Set<String> _teacherUnavailKeys = <String>{}; // format: 'Day|HH:mm'
+  // Scroll controllers for navigating the timetable
+  final ScrollController _classListScrollCtrl = ScrollController();
+  final ScrollController _tableVScrollCtrl = ScrollController();
+  final ScrollController _tableHScrollCtrl = ScrollController();
+  late TabController _tabController;
+  late FocusNode _kbFocus;
+  // Spotlight targets for tour
+  final GlobalKey _filtersBarKey = GlobalKey();
+  final GlobalKey _viewControlsKey = GlobalKey();
+  final GlobalKey _gridAreaKey = GlobalKey();
+  final GlobalKey _paletteKey = GlobalKey();
+  final GlobalKey _tabBarKey = GlobalKey();
+
+
+  @override
+  void initState() {
+    _searchController = TextEditingController();
+    _searchFocusNode = FocusNode();
+    super.initState();
+    _scheduling = SchedulingService(_dbService);
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+      if (_tabController.index == 1) {
+        _kbFocus.requestFocus();
+      }
+    });
+    _kbFocus = FocusNode(debugLabel: 'timetable_keyboard');
+    if (_tabController.index == 1) {
+      // Donner le focus aux raccourcis clavier en vue emploi du temps
+      _kbFocus.requestFocus();
+    }
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
+    academicYearNotifier.addListener(_onAcademicYearChanged);
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    // Utiliser la valeur canonicalisée de l'application pour l'année académique
+    // (stockée dans SharedPreferences via utils/academic_year.dart) afin que
+    // le filtrage corresponde aux classes créées par l'utilisateur.
+    final currentAcademicYear = await getCurrentAcademicYear();
+    final effectiveYear = _resolveEffectiveAcademicYear(
+      fallback: currentAcademicYear,
+    );
+
+    // Charger les données depuis le service DB
+    final allClasses = await _dbService.getClasses();
+    final allTeachers = await _dbService.getStaff();
+    final allSubjects = await _dbService.getCourses();
+    final schoolInfo = await _dbService.getSchoolInfo();
+    final allEntries = await _dbService.getTimetableEntries();
+
+    // Filtrer par année académique courante
+    _classes = allClasses.where((c) {
+      try {
+        return (c.academicYear ?? '') == effectiveYear;
+      } catch (_) {
+        // Si le modèle n'a pas le champ academicYear, on garde tout (fallback)
+        return true;
+      }
+    }).toList();
+
+    _teachers = allTeachers;
+    _subjects = allSubjects;
+    _schoolInfo = schoolInfo;
+
+    _timetableEntries = allEntries.where((e) {
+      try {
+        return (e.academicYear ?? '') == effectiveYear;
+      } catch (_) {
+        // fallback: si pas de champ, conserver l'entrée
+        return true;
+      }
+    }).toList();
+
+    // Charger la configuration des jours, créneaux et pauses depuis les préférences
+    final prefDays = await ttp.loadDays();
+    final prefSlots = await ttp.loadSlots();
+    final prefBreaks = await ttp.loadBreakSlots();
+    final classBreaksMap = await ttp.loadClassBreakSlotsMap();
+    _daysOfWeek
+      ..clear()
+      ..addAll(prefDays);
+    _timeSlots
+      ..clear()
+      ..addAll(prefSlots);
+    _classBreakSlotsMap = classBreaksMap;
+    _breakSlots = prefBreaks;
+
+    // Load auto-gen prefs
+    _morningStartCtrl.text = await ttp.loadMorningStart();
+    _morningEndCtrl.text = await ttp.loadMorningEnd();
+    _afternoonStartCtrl.text = await ttp.loadAfternoonStart();
+    _afternoonEndCtrl.text = await ttp.loadAfternoonEnd();
+    _sessionMinutesCtrl.text = (await ttp.loadSessionMinutes()).toString();
+    _blockDefaultCtrl.text = (await ttp.loadBlockDefaultSlots()).toString();
+    _threeHourThresholdCtrl.text = (await ttp.loadThreeHourThreshold()).toString();
+    _optionalMaxMinutesCtrl.text = (await ttp.loadOptionalMaxMinutes()).toString();
+    _capTwoHourBlocksWeekly = await ttp.loadCapTwoHourBlocksWeekly();
+    _excludedFromTwoHourCap = await ttp.loadTwoHourCapExcludedSubjects();
+    // UI prefs
+    _showSummaries = await ttp.loadShowSummaries();
+    _showClassList = await ttp.loadShowClassList();
+    _gridZoom = await ttp.loadGridZoom();
+    _leftPanelWidth = await ttp.loadLeftPanelWidth();
+    _tourSeen = await ttp.loadTimetableTourSeen();
+
+    setState(() {
+      // initialiser la sélection de classe/enseignant si nécessaire
+      if (_selectedClassKey == null && _classes.isNotEmpty) {
+        _selectedClassKey = _classKey(_classes.first);
+      } else if (_selectedClassKey != null) {
+        final current = _classFromKey(_selectedClassKey);
+        if (current == null && _classes.isNotEmpty) {
+          _selectedClassKey = _classKey(_classes.first);
+        }
+      }
+
+      // Apply per-class break override if present
+      if (_selectedClassKey != null &&
+          _classBreakSlotsMap.containsKey(_selectedClassKey)) {
+        _breakSlots = Set<String>.from(_classBreakSlotsMap[_selectedClassKey]!);
+      }
+
+      if (_selectedTeacherFilter == null && _teachers.isNotEmpty) {
+        _selectedTeacherFilter = _teachers.first.name;
+      }
+
+      // on peut exposer l'année académique courante pour affichage
+      _currentAcademicYearLabel = effectiveYear;
+    });
+
+    // Load selected teacher unavailability if in teacher view
+    if (!_isClassView &&
+        _selectedTeacherFilter != null &&
+        _selectedTeacherFilter!.isNotEmpty) {
+      await _loadTeacherUnavailability(
+        _selectedTeacherFilter!,
+        effectiveYear,
+      );
+    }
+
+    // Démarrer le tour guidé si première fois
+    if (!_tourSeen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startTimetableTour());
+    }
+  }
+
+  Future<void> _onSelectClassKey(String? key) async {
+    setState(() => _selectedClassKey = key);
+    if (key == null) return;
+    // Refresh break slots based on per-class override
+    final map = _classBreakSlotsMap.isEmpty
+        ? await ttp.loadClassBreakSlotsMap()
+        : _classBreakSlotsMap;
+    if (map.containsKey(key)) {
+      setState(() => _breakSlots = Set<String>.from(map[key]!));
+    } else {
+      final global = await ttp.loadBreakSlots();
+      setState(() => _breakSlots = global);
+    }
+  }
+
+  Future<void> _loadTeacherUnavailability(
+    String teacherName,
+    String academicYear,
+  ) async {
+    final rows = await _dbService.getTeacherUnavailability(
+      teacherName,
+      academicYear,
+    );
+    setState(() {
+      _teacherUnavailKeys = rows
+          .map((e) => '${e['dayOfWeek']}|${e['startTime']}')
+          .toSet();
+    });
+  }
+
+  Class? _selectedClass() => _classFromKey(_selectedClassKey);
+
+  Staff? _findTeacherForSubject(String subject, Class cls) {
+    final both = _teachers.firstWhere(
+      (t) => t.courses.contains(subject) && t.classes.contains(cls.name),
+      orElse: () => Staff.empty(),
+    );
+    if (both.id.isNotEmpty) return both;
+    final any = _teachers.firstWhere(
+      (t) => t.courses.contains(subject),
+      orElse: () => Staff.empty(),
+    );
+    return any.id.isNotEmpty ? any : null;
+  }
+
+  @override
+  void dispose() {
+    academicYearNotifier.removeListener(_onAcademicYearChanged);
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    _morningStartCtrl.dispose();
+    _morningEndCtrl.dispose();
+    _afternoonStartCtrl.dispose();
+    _afternoonEndCtrl.dispose();
+    _sessionMinutesCtrl.dispose();
+    _sessionsPerSubjectCtrl.dispose();
+    _teacherMaxPerDayCtrl.dispose();
+    _classMaxPerDayCtrl.dispose();
+    _subjectMaxPerDayCtrl.dispose();
+    _blockDefaultCtrl.dispose();
+    _threeHourThresholdCtrl.dispose();
+    _optionalMaxMinutesCtrl.dispose();
+    _tabController.dispose();
+    _classListScrollCtrl.dispose();
+    _tableVScrollCtrl.dispose();
+    _tableHScrollCtrl.dispose();
+    _kbFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width > 900;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      floatingActionButton: (_tabController.index == 1)
+          ? FloatingActionButton.small(
+              tooltip: _fullscreen ? 'Quitter le plein écran' : 'Plein écran',
+              onPressed: () => setState(() => _fullscreen = !_fullscreen),
+              child: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+            )
+          : null,
+      body: Column(
+        children: [
+          if (!_fullscreen) _buildHeader(context, isDarkMode, isDesktop),
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.shadowColor.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+              ),
+              child: TabBar(
+                key: _tabBarKey,
+                controller: _tabController,
+                indicator: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0EA5E9), Color(0xFF10B981)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
+                labelColor: Colors.white,
+                unselectedLabelColor: theme.textTheme.bodyMedium?.color,
+                labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                tabs: const [
+                  Tab(text: 'Paramètres'),
+                  Tab(text: 'Emploi du temps'),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Tab 1: paramètres & génération
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: _buildAutoGenPanel(context),
+                ),
+                // Tab 2: tableau + filtres + exports + palette
+                RawKeyboardListener(
+                  focusNode: _kbFocus,
+                  onKey: (RawKeyEvent e) {
+                    if (_tabController.index != 1) return;
+                    if (e is! RawKeyDownEvent) return;
+                    final k = e.logicalKey;
+                    if (k == LogicalKeyboardKey.equal ||
+                        k == LogicalKeyboardKey.add ||
+                        k == LogicalKeyboardKey.numpadAdd) {
+                      setState(() { _gridZoom = (_gridZoom + 0.1).clamp(0.6, 2.0); });
+                      ttp.saveGridZoom(_gridZoom);
+                    } else if (k == LogicalKeyboardKey.minus ||
+                        k == LogicalKeyboardKey.numpadSubtract) {
+                      setState(() { _gridZoom = (_gridZoom - 0.1).clamp(0.6, 2.0); });
+                      ttp.saveGridZoom(_gridZoom);
+                    } else if (k == LogicalKeyboardKey.keyF) {
+                      setState(() { _fullscreen = !_fullscreen; });
+                    } else if (k == LogicalKeyboardKey.digit0) {
+                      setState(() { _gridZoom = 1.0; _showClassList = true; _showSummaries = false; });
+                      ttp.saveGridZoom(_gridZoom);
+                      ttp.saveShowClassList(_showClassList);
+                      ttp.saveShowSummaries(_showSummaries);
+                    }
+                  },
+                  child: Column(
+                  children: [
+                    if (!_fullscreen)
+                      Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          Container(
+                            key: _filtersBarKey,
+                            child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Tooltip(
+                                message: 'Basculer entre la vue Classe et la vue Enseignant',
+                                child: ToggleButtons(
+                                  isSelected: [_isClassView, !_isClassView],
+                                  onPressed: (index) {
+                                    setState(() {
+                                      _isClassView = index == 0;
+                                    });
+                                  },
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                      child: Text('Classe', style: theme.textTheme.bodyMedium),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                      child: Text('Enseignant', style: theme.textTheme.bodyMedium),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              if (_isClassView)
+                                Expanded(
+                                  child: Tooltip(
+                                    message: 'Filtrer la grille par classe',
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedClassKey,
+                                      decoration: InputDecoration(
+                                        labelText: 'Filtrer par Classe',
+                                        labelStyle: theme.textTheme.bodyMedium,
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                      isDense: true,
+                                      isExpanded: true,
+                                      items: _classes
+                                          .map((cls) => DropdownMenuItem<String>(
+                                                value: _classKey(cls),
+                                                child: Text(_classLabel(cls), style: theme.textTheme.bodyMedium),
+                                              ))
+                                          .toList(),
+                                      onChanged: (v) => _onSelectClassKey(v),
+                                    ),
+                                  ),
+                                )
+                              else
+                                Expanded(
+                                  child: Tooltip(
+                                    message: 'Filtrer la grille par enseignant',
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedTeacherFilter,
+                                      decoration: InputDecoration(
+                                        labelText: 'Filtrer par Enseignant',
+                                        labelStyle: theme.textTheme.bodyMedium,
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                      isDense: true,
+                                      isExpanded: true,
+                                      items: _teachers
+                                          .map((t) => DropdownMenuItem<String>(
+                                                value: t.name,
+                                                child: Text(t.name, style: theme.textTheme.bodyMedium),
+                                              ))
+                                          .toList(),
+                                      onChanged: (v) async {
+                                        setState(() => _selectedTeacherFilter = v);
+                                        if (v != null && v.isNotEmpty) {
+                                          final year = await _effectiveAcademicYear();
+                                          await _loadTeacherUnavailability(v, year);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 16),
+                              Tooltip(
+                                message: 'Ajouter un cours à l\'emploi du temps',
+                                child: ElevatedButton.icon(
+                                  onPressed: _showAddEditTimetableEntryDialog,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Ajouter un cours'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryBlue,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (!_isClassView)
+                                Tooltip(
+                                  message: 'Indisponibilités de l\'enseignant sélectionné',
+                                  child: ElevatedButton.icon(
+                                    onPressed: _showTeacherUnavailabilityDialog,
+                                    icon: const Icon(Icons.event_busy),
+                                    label: const Text('Indisponibilités'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF6D28D9),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              Tooltip(
+                                message: 'Exporter la vue actuelle (classe/enseignant) en PDF',
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _exportTimetableToPdf(exportBy: _isClassView ? 'class' : 'teacher'),
+                                  icon: const Icon(Icons.picture_as_pdf),
+                                  label: const Text('Exporter PDF'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Tooltip(
+                                message: 'Exporter la vue actuelle (classe/enseignant) en Excel',
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _exportTimetableToExcel(exportBy: _isClassView ? 'class' : 'teacher'),
+                                  icon: const Icon(Icons.grid_on),
+                                  label: const Text('Exporter Excel'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(key: _viewControlsKey, child: _buildViewControls(context)),
+                                  if (!_tourSeen) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(999),
+                                        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.2)),
+                                      ),
+                                      child: Row(
+                                        children: const [
+                                          Icon(Icons.fiber_new, size: 14),
+                                          SizedBox(width: 4),
+                                          Text('Nouveau', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (_isClassView && _showSummaries) _buildClassSubjectHoursSummary(context),
+                          if (_isClassView && _showSummaries) _buildClassTeacherHoursSummary(context),
+                          if (_isClassView && _showSummaries) _buildClassDayHoursSummary(context),
+                          if (!_isClassView && _showSummaries) _buildTeacherHoursSummary(context),
+                          if (!_isClassView && _showSummaries) _buildTeacherDayHoursSummary(context),
+                          if (_isClassView) _buildSubjectPalette(context),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Row(
+                            children: [
+                              if (_showClassList && !_fullscreen)
+                                SizedBox(
+                                  width: _leftPanelWidth,
+                                  child: Scrollbar(
+                                    controller: _classListScrollCtrl,
+                                    thumbVisibility: true,
+                                    child: ListView.builder(
+                                      controller: _classListScrollCtrl,
+                                      itemCount: _classes.length,
+                                      itemBuilder: (context, index) {
+                                        final aClass = _classes[index];
+                                        return ListTile(
+                                          title: Text(_classLabel(aClass), style: theme.textTheme.bodyMedium),
+                                          selected: _classKey(aClass) == _selectedClassKey,
+                                          onTap: () => _onSelectClassKey(_classKey(aClass)),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              if (_showClassList && !_fullscreen)
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.resizeColumn,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.translucent,
+                                    onHorizontalDragUpdate: (details) {
+                                      setState(() {
+                                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(120.0, 420.0);
+                                      });
+                                      ttp.saveLeftPanelWidth(_leftPanelWidth);
+                                    },
+                                    child: Container(
+                                      width: 6,
+                                      height: double.infinity,
+                                      color: theme.dividerColor.withOpacity(0.3),
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: Container(
+                                  key: _gridAreaKey,
+                                  child: Scrollbar(
+                                    controller: _tableVScrollCtrl,
+                                    thumbVisibility: true,
+                                    child: SingleChildScrollView(
+                                      controller: _tableVScrollCtrl,
+                                      scrollDirection: Axis.vertical,
+                                      child: Scrollbar(
+                                        controller: _tableHScrollCtrl,
+                                        thumbVisibility: true,
+                                        notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
+                                        child: SingleChildScrollView(
+                                          controller: _tableHScrollCtrl,
+                                          scrollDirection: Axis.horizontal,
+                                          child: _buildTimetableGrid(context),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_fullscreen)
+                            Positioned(
+                              top: 8,
+                              right: 16,
+                              child: Opacity(
+                                opacity: 0.95,
+                                child: _buildViewControls(context),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                // Close RawKeyboardListener
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Map<String, int>> _computeClassSubjectMinutes(Class cls) async {
+    final assigned = await _dbService.getCoursesForClass(cls.name, cls.academicYear);
+    final names = assigned.map((c) => c.name).toSet();
+    final Map<String, int> minutes = { for (final n in names) n: 0 };
+    for (final e in _timetableEntries) {
+      if (e.className == cls.name && e.academicYear == cls.academicYear) {
+        final start = _toMin(e.startTime);
+        final end = _toMin(e.endTime);
+        final diff = (end > start) ? (end - start) : 0;
+        minutes[e.subject] = (minutes[e.subject] ?? 0) + diff;
+      }
+    }
+    return minutes;
+  }
+
+  Widget _buildClassSubjectHoursSummary(BuildContext context) {
+    final cls = _selectedClass();
+    if (cls == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return FutureBuilder<Map<String, int>>(
+      future: _computeClassSubjectMinutes(cls),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const SizedBox.shrink();
+        }
+        final data = snap.data!;
+        if (data.isEmpty) return const SizedBox.shrink();
+        String fmtHours(int minutes) {
+          final h = minutes / 60.0;
+          if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
+          return '${h.toStringAsFixed(1)}h';
+        }
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: data.entries.map((e) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryBlue.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.schedule, size: 14, color: Color(0xFF3B82F6)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${e.key}: ${fmtHours(e.value)}',
+                      style: const TextStyle(
+                        color: Color(0xFF3B82F6),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>> _computeClassTeacherMinutes(Class cls) async {
+    final Map<String, int> minutes = {};
+    for (final e in _timetableEntries) {
+      if (e.className == cls.name && e.academicYear == cls.academicYear) {
+        if ((e.teacher).isEmpty) continue;
+        final start = _toMin(e.startTime);
+        final end = _toMin(e.endTime);
+        final diff = (end > start) ? (end - start) : 0;
+        minutes[e.teacher] = (minutes[e.teacher] ?? 0) + diff;
+      }
+    }
+    return minutes;
+  }
+
+  Widget _buildClassTeacherHoursSummary(BuildContext context) {
+    final cls = _selectedClass();
+    if (cls == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return FutureBuilder<Map<String, int>>(
+      future: _computeClassTeacherMinutes(cls),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        if (data.isEmpty) return const SizedBox.shrink();
+        String fmtHours(int minutes) {
+          final h = minutes / 60.0;
+          if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
+          return '${h.toStringAsFixed(1)}h';
+        }
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: data.entries.map((e) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.successGreen.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.person, size: 14, color: AppColors.successGreen),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${e.key}: ${fmtHours(e.value)}',
+                      style: const TextStyle(
+                        color: AppColors.successGreen,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>> _computeClassDayMinutes(Class cls) async {
+    final Map<String, int> minutes = {};
+    for (final e in _timetableEntries) {
+      if (e.className == cls.name && e.academicYear == cls.academicYear) {
+        final start = _toMin(e.startTime);
+        final end = _toMin(e.endTime);
+        final diff = (end > start) ? (end - start) : 0;
+        minutes[e.dayOfWeek] = (minutes[e.dayOfWeek] ?? 0) + diff;
+      }
+    }
+    return minutes;
+  }
+
+  Widget _buildClassDayHoursSummary(BuildContext context) {
+    final cls = _selectedClass();
+    if (cls == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return FutureBuilder<Map<String, int>>(
+      future: _computeClassDayMinutes(cls),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        if (data.isEmpty) return const SizedBox.shrink();
+        String fmtHours(int minutes) {
+          final h = minutes / 60.0;
+          if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
+          return '${h.toStringAsFixed(1)}h';
+        }
+        final totalMinutes = data.values.fold<int>(0, (a, b) => a + b);
+        final chips = <Widget>[];
+        chips.add(Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.primaryBlue.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.summarize, size: 14, color: AppColors.primaryBlue),
+              const SizedBox(width: 6),
+              Text(
+                'Total: ${fmtHours(totalMinutes)}',
+                style: const TextStyle(
+                  color: AppColors.primaryBlue,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ));
+        final ordered = _daysOfWeek
+            .where((d) => data.containsKey(d))
+            .map((d) => MapEntry(d, data[d]!))
+            .toList();
+        chips.addAll(ordered.map((e) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today, size: 14, color: AppColors.primaryBlue),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${e.key}: ${fmtHours(e.value)}',
+                    style: const TextStyle(
+                      color: AppColors.primaryBlue,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )));
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>> _computeTeacherClassMinutes(String teacherName) async {
+    final Map<String, int> minutes = {};
+    for (final e in _timetableEntries) {
+      if (e.teacher == teacherName) {
+        final start = _toMin(e.startTime);
+        final end = _toMin(e.endTime);
+        final diff = (end > start) ? (end - start) : 0;
+        minutes[e.className] = (minutes[e.className] ?? 0) + diff;
+      }
+    }
+    return minutes;
+  }
+
+  Widget _buildTeacherHoursSummary(BuildContext context) {
+    final teacherName = _selectedTeacherFilter;
+    if (teacherName == null || teacherName.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return FutureBuilder<Map<String, int>>(
+      future: _computeTeacherClassMinutes(teacherName),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        if (data.isEmpty) return const SizedBox.shrink();
+        String fmtHours(int minutes) {
+          final h = minutes / 60.0;
+          if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
+          return '${h.toStringAsFixed(1)}h';
+        }
+        final totalMinutes = data.values.fold<int>(0, (a, b) => a + b);
+        final chips = <Widget>[];
+        chips.add(Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.successGreen.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.summarize, size: 14, color: AppColors.successGreen),
+              const SizedBox(width: 6),
+              Text(
+                'Total: ${fmtHours(totalMinutes)}',
+                style: const TextStyle(
+                  color: AppColors.successGreen,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ));
+        chips.addAll(data.entries.map((e) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.class_, size: 14, color: AppColors.primaryBlue),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${e.key}: ${fmtHours(e.value)}',
+                    style: const TextStyle(
+                      color: AppColors.primaryBlue,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )));
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<Map<String, int>> _computeTeacherDayMinutes(String teacherName) async {
+    final Map<String, int> minutes = {};
+    for (final e in _timetableEntries) {
+      if (e.teacher == teacherName) {
+        final start = _toMin(e.startTime);
+        final end = _toMin(e.endTime);
+        final diff = (end > start) ? (end - start) : 0;
+        minutes[e.dayOfWeek] = (minutes[e.dayOfWeek] ?? 0) + diff;
+      }
+    }
+    return minutes;
+  }
+
+  Widget _buildTeacherDayHoursSummary(BuildContext context) {
+    final teacherName = _selectedTeacherFilter;
+    if (teacherName == null || teacherName.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return FutureBuilder<Map<String, int>>(
+      future: _computeTeacherDayMinutes(teacherName),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!;
+        if (data.isEmpty) return const SizedBox.shrink();
+        String fmtHours(int minutes) {
+          final h = minutes / 60.0;
+          if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
+          return '${h.toStringAsFixed(1)}h';
+        }
+        final totalMinutes = data.values.fold<int>(0, (a, b) => a + b);
+        final chips = <Widget>[];
+        chips.add(Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.primaryBlue.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.summarize, size: 14, color: AppColors.primaryBlue),
+              const SizedBox(width: 6),
+              Text(
+                'Total: ${fmtHours(totalMinutes)}',
+                style: const TextStyle(
+                  color: AppColors.primaryBlue,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ));
+        final ordered = _daysOfWeek
+            .where((d) => data.containsKey(d))
+            .map((d) => MapEntry(d, data[d]!))
+            .toList();
+        chips.addAll(ordered.map((e) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today, size: 14, color: AppColors.primaryBlue),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${e.key}: ${fmtHours(e.value)}',
+                    style: const TextStyle(
+                      color: AppColors.primaryBlue,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            )));
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: chips,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildViewControls(BuildContext context) {
+    final theme = Theme.of(context);
+    Color bg(bool sel) => sel
+        ? theme.colorScheme.primary.withOpacity(0.12)
+        : theme.colorScheme.surfaceVariant.withOpacity(0.5);
+    Color fg(bool sel) => sel
+        ? theme.colorScheme.primary
+        : theme.iconTheme.color?.withOpacity(0.9) ?? Colors.black87;
+
+    Widget controlIcon({
+      required IconData icon,
+      required String tooltip,
+      required bool selected,
+      required VoidCallback onTap,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: bg(selected),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+            ),
+            child: Icon(icon, size: 18, color: fg(selected)),
+          ),
+        ),
+      );
+    }
+
+    final zoomBox = Container(
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            icon: const Icon(Icons.remove, size: 18),
+            tooltip: 'Zoom -',
+            onPressed: () {
+              setState(() {
+                _gridZoom = (_gridZoom - 0.1).clamp(0.6, 2.0);
+              });
+              ttp.saveGridZoom(_gridZoom);
+            },
+          ),
+          const SizedBox(width: 4),
+          PopupMenuButton<double>(
+            tooltip: 'Niveau de zoom',
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 0.75, child: Text('75%')),
+              PopupMenuItem(value: 1.0, child: Text('100%')),
+              PopupMenuItem(value: 1.25, child: Text('125%')),
+              PopupMenuItem(value: 1.5, child: Text('150%')),
+              PopupMenuItem(value: 1.75, child: Text('175%')),
+              PopupMenuItem(value: 2.0, child: Text('200%')),
+            ],
+            onSelected: (v) {
+              setState(() => _gridZoom = v);
+              ttp.saveGridZoom(_gridZoom);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
+              ),
+              child: Text('${(_gridZoom * 100).round()}%', style: theme.textTheme.bodySmall),
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            icon: const Icon(Icons.add, size: 18),
+            tooltip: 'Zoom +',
+            onPressed: () {
+              setState(() {
+                _gridZoom = (_gridZoom + 0.1).clamp(0.6, 2.0);
+              });
+              ttp.saveGridZoom(_gridZoom);
+            },
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          zoomBox,
+          Container(
+            width: 1,
+            height: 24,
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            color: theme.dividerColor.withOpacity(0.3),
+          ),
+          controlIcon(
+            icon: Icons.restart_alt,
+            tooltip: 'Réinitialiser (zoom 100%, réafficher liste et résumés masqués)',
+            selected: false,
+            onTap: () {
+              setState(() { _gridZoom = 1.0; _showClassList = true; _showSummaries = false; });
+              ttp.saveGridZoom(_gridZoom);
+              ttp.saveShowClassList(_showClassList);
+              ttp.saveShowSummaries(_showSummaries);
+            },
+          ),
+          const SizedBox(width: 6),
+          controlIcon(
+            icon: _showSummaries ? Icons.summarize : Icons.summarize_outlined,
+            tooltip: _showSummaries ? 'Masquer les résumés' : 'Afficher les résumés',
+            selected: _showSummaries,
+            onTap: () {
+              setState(() => _showSummaries = !_showSummaries);
+              ttp.saveShowSummaries(_showSummaries);
+            },
+          ),
+          const SizedBox(width: 6),
+          controlIcon(
+            icon: _showClassList ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+            tooltip: _showClassList ? 'Masquer la liste des classes' : 'Afficher la liste des classes',
+            selected: _showClassList,
+            onTap: () {
+              setState(() => _showClassList = !_showClassList);
+              ttp.saveShowClassList(_showClassList);
+            },
+          ),
+          const SizedBox(width: 6),
+          controlIcon(
+            icon: _fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+            tooltip: _fullscreen ? 'Quitter le plein écran' : 'Plein écran',
+            selected: _fullscreen,
+            onTap: () => setState(() => _fullscreen = !_fullscreen),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _toMin(String t) {
+    try {
+      final p = t.split(':');
+      return int.parse(p[0]) * 60 + int.parse(p[1]);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  String _fmtHHmm(int m) {
+    final h = (m ~/ 60).toString().padLeft(2, '0');
+    final mi = (m % 60).toString().padLeft(2, '0');
+    return '$h:$mi';
+  }
+
+  List<String> _buildSlotsFromSegments() {
+    final int session = int.tryParse(_sessionMinutesCtrl.text) ?? 60;
+    final segs = <List<int>>[];
+    final ms = _toMin(_morningStartCtrl.text);
+    final me = _toMin(_morningEndCtrl.text);
+    final as = _toMin(_afternoonStartCtrl.text);
+    final ae = _toMin(_afternoonEndCtrl.text);
+    if (me > ms + 10) segs.add([ms, me]);
+    if (ae > as + 10) segs.add([as, ae]);
+    final slots = <String>[];
+    for (final seg in segs) {
+      int cur = seg[0];
+      while (cur + session <= seg[1]) {
+        final start = _fmtHHmm(cur);
+        final end = _fmtHHmm(cur + session);
+        slots.add('$start - $end');
+        cur += session;
+      }
+    }
+    return slots;
+  }
+
+  Widget _buildAutoGenPanel(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_mode, color: AppColors.primaryBlue),
+              const SizedBox(width: 8),
+              Text(
+                'Auto-génération des emplois du temps',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Tooltip(
+                message: 'Éditer jours, créneaux et pauses (par classe ou global)',
+                child: OutlinedButton.icon(
+                  onPressed: _showEditGridDialog,
+                  icon: const Icon(Icons.schedule),
+                  label: const Text('Éditer jours / créneaux / pauses'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (_isGenerating) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              // Jours de la semaine (sélection)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('Jours:'),
+                    ...['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi']
+                        .map((d) => FilterChip(
+                              label: Text(d),
+                              selected: _daysOfWeek.contains(d),
+                              onSelected: (sel) async {
+                                setState(() {
+                                  if (sel) {
+                                    if (!_daysOfWeek.contains(d)) _daysOfWeek.add(d);
+                                  } else {
+                                    _daysOfWeek.remove(d);
+                                  }
+                                });
+                                await ttp.saveDays(_daysOfWeek);
+                              },
+                            ))
+                        .toList(),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: _morningStartCtrl,
+                  decoration: const InputDecoration(labelText: 'Début matin'),
+                ),
+              ),
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: _morningEndCtrl,
+                  decoration: const InputDecoration(labelText: 'Fin matin'),
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _afternoonStartCtrl,
+                  decoration: const InputDecoration(labelText: 'Début après-midi'),
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _afternoonEndCtrl,
+                  decoration: const InputDecoration(labelText: 'Fin après-midi'),
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _sessionMinutesCtrl,
+                  decoration: const InputDecoration(labelText: 'Durée cours (min)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<String>(
+                  value: _blockDefaultCtrl.text,
+                  decoration: const InputDecoration(labelText: 'Taille bloc par défaut'),
+                  items: const [
+                    DropdownMenuItem(value: '1', child: Text('1h')),
+                    DropdownMenuItem(value: '2', child: Text('2h')),
+                    DropdownMenuItem(value: '3', child: Text('3h')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _blockDefaultCtrl.text = v);
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _threeHourThresholdCtrl,
+                  decoration: const InputDecoration(labelText: 'Seuil bloc 3h (coef×moyenne)'),
+                  keyboardType: TextInputType.numberWithOptions(decimal: true),
+                ),
+              ),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _sessionsPerSubjectCtrl,
+                  decoration: const InputDecoration(labelText: 'Séances/matière (semaine)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _teacherMaxPerDayCtrl,
+                  decoration: const InputDecoration(labelText: 'Max cours/jour (enseignant)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              SizedBox(
+                width: 160,
+                child: TextField(
+                  controller: _classMaxPerDayCtrl,
+                  decoration: const InputDecoration(labelText: 'Max cours/jour (classe)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              SizedBox(
+                width: 180,
+                child: TextField(
+                  controller: _subjectMaxPerDayCtrl,
+                  decoration: const InputDecoration(labelText: 'Max par matière/jour (classe)'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: _optionalMaxMinutesCtrl,
+                  decoration: const InputDecoration(labelText: 'Max minutes optionnelles/sem.'),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Switch(
+                    value: _capTwoHourBlocksWeekly,
+                    onChanged: (v) async {
+                      setState(() => _capTwoHourBlocksWeekly = v);
+                      await ttp.saveCapTwoHourBlocksWeekly(v);
+                    },
+                  ),
+                  const Text('Limiter à 1 bloc de 2h / semaine (par matière)'),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('Exclusions bloc 2h :'),
+                    ..._subjects.map((c) => FilterChip(
+                          label: Text(c.name),
+                          selected: _excludedFromTwoHourCap.contains(c.name),
+                          onSelected: (sel) async {
+                            setState(() {
+                              if (sel) {
+                                _excludedFromTwoHourCap.add(c.name);
+                              } else {
+                                _excludedFromTwoHourCap.remove(c.name);
+                              }
+                            });
+                            await ttp.saveTwoHourCapExcludedSubjects(_excludedFromTwoHourCap);
+                          },
+                        )),
+                  ],
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Tooltip(
+                    message: 'Supprimer l\'emploi du temps existant avant de générer de nouveaux cours',
+                    child: Switch(
+                      value: _clearBeforeGen,
+                      onChanged: (v) => setState(() => _clearBeforeGen = v),
+                    ),
+                  ),
+                  const Text('Effacer avant génération'),
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Tooltip(
+                    message: 'Essayer de remplir tous les créneaux disponibles (ignorer certaines limites)',
+                    child: Switch(
+                      value: _saturateAll,
+                      onChanged: (v) => setState(() => _saturateAll = v),
+                    ),
+                  ),
+                  const Text('Saturer toutes les heures'),
+                ],
+              ),
+              Tooltip(
+                message: 'Générer pour l\'ensemble des classes (selon vos paramètres)',
+                child: ElevatedButton.icon(
+                  onPressed: _isGenerating ? null : _onGenerateForAllClasses,
+                  icon: const Icon(Icons.apartment, color: Colors.white),
+                  label: const Text('Générer pour toutes les classes', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
+                ),
+              ),
+              Tooltip(
+                message: 'Générer pour l\'ensemble des enseignants (selon vos paramètres)',
+                child: ElevatedButton.icon(
+                  onPressed: _isGenerating ? null : _onGenerateForAllTeachers,
+                  icon: const Icon(Icons.person, color: Colors.white),
+                  label: const Text('Générer pour tous les enseignants', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.successGreen),
+                ),
+              ),
+              // Génération ciblée selon la vue
+              if (_isClassView)
+                Tooltip(
+                  message: 'Générer uniquement pour la classe affichée',
+                  child: ElevatedButton.icon(
+                    onPressed: _isGenerating ? null : _onGenerateForSelectedClass,
+                    icon: const Icon(Icons.class_, color: Colors.white),
+                    label: const Text('Générer pour la classe sélectionnée', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6)),
+                  ),
+                )
+              else
+                Tooltip(
+                  message: 'Générer uniquement pour l\'enseignant affiché',
+                  child: ElevatedButton.icon(
+                    onPressed: _isGenerating ? null : _onGenerateForSelectedTeacher,
+                    icon: const Icon(Icons.person_outline, color: Colors.white),
+                    label: const Text('Générer pour l\'enseignant sélectionné', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B)),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Tooltip(
+                message: 'Supprimer tous les cours de l\'emploi du temps',
+                child: ElevatedButton.icon(
+                  onPressed: _isGenerating ? null : _onClearTimetable,
+                  icon: const Icon(Icons.clear_all, color: Colors.white),
+                  label: const Text('Restaurer à vierge', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveAutoGenPrefs() async {
+    await ttp.saveMorningStart(_morningStartCtrl.text.trim());
+    await ttp.saveMorningEnd(_morningEndCtrl.text.trim());
+    await ttp.saveAfternoonStart(_afternoonStartCtrl.text.trim());
+    await ttp.saveAfternoonEnd(_afternoonEndCtrl.text.trim());
+    final minutes = int.tryParse(_sessionMinutesCtrl.text) ?? 60;
+    await ttp.saveSessionMinutes(minutes);
+    await ttp.saveBlockDefaultSlots(int.tryParse(_blockDefaultCtrl.text) ?? 2);
+    await ttp.saveThreeHourThreshold(double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5);
+    await ttp.saveOptionalMaxMinutes(int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120);
+    await ttp.saveCapTwoHourBlocksWeekly(_capTwoHourBlocksWeekly);
+    await ttp.saveTwoHourCapExcludedSubjects(_excludedFromTwoHourCap);
+    // Also persist generated slots for consistency
+    final slots = _buildSlotsFromSegments();
+    await ttp.saveSlots(slots);
+    setState(() {
+      _timeSlots
+        ..clear()
+        ..addAll(slots);
+    });
+  }
+
+  Future<void> _onGenerateForAllClasses() async {
+    setState(() => _isGenerating = true);
+    try {
+      await _saveAutoGenPrefs();
+      final slots = List<String>.from(_timeSlots);
+      final classBreaksMap = await ttp.loadClassBreakSlotsMap();
+      int total = 0;
+          for (final cls in _classes) {
+            final classKey = _classKey(cls);
+            final effectiveBreaks = classBreaksMap[classKey] ?? _breakSlots;
+            int created = 0;
+            if (_saturateAll) {
+              created = await _scheduling.autoSaturateForClass(
+                targetClass: cls,
+                daysOfWeek: _daysOfWeek,
+                timeSlots: slots,
+                breakSlots: effectiveBreaks,
+                clearExisting: _clearBeforeGen,
+                optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+                morningStart: _morningStartCtrl.text.trim(),
+                morningEnd: _morningEndCtrl.text.trim(),
+                afternoonStart: _afternoonStartCtrl.text.trim(),
+                afternoonEnd: _afternoonEndCtrl.text.trim(),
+              );
+            } else {
+              created = await _scheduling.autoGenerateForClass(
+                targetClass: cls,
+                daysOfWeek: _daysOfWeek,
+                timeSlots: slots,
+                breakSlots: effectiveBreaks,
+                clearExisting: _clearBeforeGen,
+                sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+                enforceTeacherWeeklyHours: true,
+                teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
+                classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
+                subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
+                blockDefaultSlots: int.tryParse(_blockDefaultCtrl.text) ?? 2,
+                threeHourThreshold: double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
+                optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+                limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
+                excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
+                morningStart: _morningStartCtrl.text.trim(),
+                morningEnd: _morningEndCtrl.text.trim(),
+                afternoonStart: _afternoonStartCtrl.text.trim(),
+                afternoonEnd: _afternoonEndCtrl.text.trim(),
+              );
+            }
+        total += created;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Génération terminée: $total cours créés.')),
+        );
+      }
+      try {
+        await _dbService.logAudit(
+          category: 'timetable',
+          action: 'auto_generate_classes',
+          details: 'classes=${_classes.length} slots=${slots.length} days=${_daysOfWeek.length} saturate=${_saturateAll ? 1 : 0}',
+        );
+      } catch (_) {}
+    } finally {
+      setState(() => _isGenerating = false);
+      await _loadData();
+    }
+  }
+
+  Future<void> _onGenerateForAllTeachers() async {
+    setState(() => _isGenerating = true);
+    try {
+      await _saveAutoGenPrefs();
+      final slots = List<String>.from(_timeSlots);
+      final classBreaksMap = await ttp.loadClassBreakSlotsMap();
+      final currentYear = await _effectiveAcademicYear();
+      int total = 0;
+      for (final t in _teachers) {
+        // Construire l'union des pauses des classes de cet enseignant (année courante)
+        final Set<String> effectiveBreaks = Set<String>.from(_breakSlots);
+        for (final className in t.classes) {
+          final cls = _classes.firstWhere(
+            (c) => c.name == className && c.academicYear == currentYear,
+            orElse: () => Class(name: className, academicYear: currentYear),
+          );
+          final key = _classKey(cls);
+          if (classBreaksMap.containsKey(key)) {
+            effectiveBreaks.addAll(classBreaksMap[key]!);
+          }
+        }
+        int created = 0;
+        if (_saturateAll) {
+          created = await _scheduling.autoSaturateForTeacher(
+            teacher: t,
+            daysOfWeek: _daysOfWeek,
+            timeSlots: slots,
+            breakSlots: effectiveBreaks,
+            clearExisting: _clearBeforeGen,
+            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+          );
+        } else {
+          created = await _scheduling.autoGenerateForTeacher(
+            teacher: t,
+            daysOfWeek: _daysOfWeek,
+            timeSlots: slots,
+            breakSlots: effectiveBreaks,
+            clearExisting: _clearBeforeGen,
+            sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+            enforceTeacherWeeklyHours: true,
+            teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
+            classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
+            subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
+            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
+            excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
+          );
+        }
+        total += created;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Génération (enseignants) terminée: $total cours créés.')),
+        );
+      }
+      try {
+        await _dbService.logAudit(
+          category: 'timetable',
+          action: 'auto_generate_teachers',
+          details: 'teachers=${_teachers.length} slots=${slots.length} days=${_daysOfWeek.length} saturate=${_saturateAll ? 1 : 0}',
+        );
+      } catch (_) {}
+    } finally {
+      setState(() => _isGenerating = false);
+      await _loadData();
+    }
+  }
+
+  Future<void> _onGenerateForSelectedClass() async {
+    final cls = _selectedClass();
+    if (cls == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucune classe sélectionnée.')),
+      );
+      return;
+    }
+    setState(() => _isGenerating = true);
+    try {
+      await _saveAutoGenPrefs();
+      final classKey = _classKey(cls);
+      final classBreaksMap = await ttp.loadClassBreakSlotsMap();
+      final Set<String> effectiveBreaks =
+          classBreaksMap[classKey] ?? _breakSlots;
+      final created = _saturateAll
+          ? await _scheduling.autoSaturateForClass(
+              targetClass: cls,
+              daysOfWeek: _daysOfWeek,
+              timeSlots: List<String>.from(_timeSlots),
+              breakSlots: effectiveBreaks,
+              clearExisting: _clearBeforeGen,
+              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+              morningStart: _morningStartCtrl.text.trim(),
+              morningEnd: _morningEndCtrl.text.trim(),
+              afternoonStart: _afternoonStartCtrl.text.trim(),
+              afternoonEnd: _afternoonEndCtrl.text.trim(),
+            )
+          : await _scheduling.autoGenerateForClass(
+              targetClass: cls,
+              daysOfWeek: _daysOfWeek,
+              timeSlots: List<String>.from(_timeSlots),
+              breakSlots: effectiveBreaks,
+              clearExisting: _clearBeforeGen,
+              sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+              enforceTeacherWeeklyHours: true,
+              teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
+              classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
+              subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
+              blockDefaultSlots: int.tryParse(_blockDefaultCtrl.text) ?? 2,
+              threeHourThreshold: double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
+              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+              limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
+              excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
+              morningStart: _morningStartCtrl.text.trim(),
+              morningEnd: _morningEndCtrl.text.trim(),
+              afternoonStart: _afternoonStartCtrl.text.trim(),
+              afternoonEnd: _afternoonEndCtrl.text.trim(),
+            );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Génération: $created cours pour ${cls.name}.')),
+        );
+      }
+      try {
+        await _dbService.logAudit(
+          category: 'timetable',
+          action: 'auto_generate_class',
+          details: 'class=${cls.name} year=${cls.academicYear} saturate=${_saturateAll ? 1 : 0}',
+        );
+      } catch (_) {}
+    } finally {
+      setState(() => _isGenerating = false);
+      await _loadData();
+    }
+  }
+
+  Future<void> _onGenerateForSelectedTeacher() async {
+    final teacherName = _selectedTeacherFilter;
+    if (teacherName == null || teacherName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun enseignant sélectionné.')),
+      );
+      return;
+    }
+    final teacher = _teachers.firstWhere(
+      (t) => t.name == teacherName,
+      orElse: () => Staff.empty(),
+    );
+    if (teacher.id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enseignant introuvable.')),
+      );
+      return;
+    }
+    setState(() => _isGenerating = true);
+    try {
+      await _saveAutoGenPrefs();
+      final created = _saturateAll
+          ? await _scheduling.autoSaturateForTeacher(
+              teacher: teacher,
+              daysOfWeek: _daysOfWeek,
+              timeSlots: List<String>.from(_timeSlots),
+              breakSlots: _breakSlots,
+              clearExisting: _clearBeforeGen,
+              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            )
+          : await _scheduling.autoGenerateForTeacher(
+              teacher: teacher,
+              daysOfWeek: _daysOfWeek,
+              timeSlots: List<String>.from(_timeSlots),
+              breakSlots: _breakSlots,
+              clearExisting: _clearBeforeGen,
+              sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+              enforceTeacherWeeklyHours: true,
+              teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
+              classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
+              subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
+              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Génération: $created cours pour $teacherName.')),
+        );
+      }
+      try {
+        await _dbService.logAudit(
+          category: 'timetable',
+          action: 'auto_generate_teacher',
+          details: 'teacher=$teacherName saturate=${_saturateAll ? 1 : 0}',
+        );
+      } catch (_) {}
+    } finally {
+      setState(() => _isGenerating = false);
+      await _loadData();
+    }
+  }
+
+  Future<void> _onClearTimetable() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red[600]),
+            const SizedBox(width: 12),
+            const Text('Confirmer la restauration'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Êtes-vous sûr de vouloir restaurer le tableau à vierge ?',
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red[200]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.red[600], size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cette action supprimera TOUS les cours de l\'emploi du temps et ne peut pas être annulée.',
+                      style: TextStyle(
+                        color: Colors.red[700],
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Restaurer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isGenerating = true);
+    try {
+      // Clear all timetable entries
+      await _dbService.clearAllTimetableEntries();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tableau restauré à vierge avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // Log the action
+      try {
+        await _dbService.logAudit(
+          category: 'timetable',
+          action: 'clear_all',
+          details: 'All timetable entries cleared',
+        );
+      } catch (_) {}
+    } finally {
+      setState(() => _isGenerating = false);
+      await _loadData();
+    }
+  }
+
+  Widget _buildTimetableDisplay(BuildContext context) {
+    final theme = Theme.of(context);
+    return DataTable(
+      columnSpacing: 20,
+      horizontalMargin: 10,
+      dataRowMaxHeight: double.infinity, // Allow rows to expand vertically
+      columns: [
+        DataColumn(label: Text('Heure', style: theme.textTheme.titleMedium)),
+        ..._daysOfWeek.map(
+          (day) =>
+              DataColumn(label: Text(day, style: theme.textTheme.titleMedium)),
+        ),
+      ],
+      rows: _timeSlots.map((timeSlot) {
+        return DataRow(
+          cells: [
+            DataCell(Text(timeSlot, style: theme.textTheme.bodyMedium)),
+            ..._daysOfWeek.map((day) {
+              final timeSlotParts = timeSlot.split(' - ');
+              final slotStartTime = timeSlotParts[0];
+              final slotEndTime = timeSlotParts.length > 1
+                  ? timeSlotParts[1]
+                  : slotStartTime;
+
+              final filteredEntries = _timetableEntries.where((e) {
+                final matchesSearch =
+                    _searchQuery.isEmpty ||
+                    e.className.toLowerCase().contains(_searchQuery) ||
+                    e.teacher.toLowerCase().contains(_searchQuery) ||
+                    e.subject.toLowerCase().contains(_searchQuery) ||
+                    e.room.toLowerCase().contains(_searchQuery);
+
+                if (_isClassView) {
+                  final classKey = _classKeyFromValues(
+                    e.className,
+                    e.academicYear,
+                  );
+                  return e.dayOfWeek == day &&
+                      e.startTime == slotStartTime &&
+                      (_selectedClassKey == null ||
+                          classKey == _selectedClassKey) &&
+                      matchesSearch;
+                } else {
+                  return e.dayOfWeek == day &&
+                      e.startTime == slotStartTime &&
+                      (_selectedTeacherFilter == null ||
+                          e.teacher == _selectedTeacherFilter) &&
+                      matchesSearch;
+                }
+              });
+
+              final entriesForSlot = filteredEntries.toList();
+              final isBreak = _breakSlots.contains(timeSlot);
+              final isUnavailableForTeacher =
+                  !_isClassView &&
+                  (_selectedTeacherFilter != null &&
+                      _selectedTeacherFilter!.isNotEmpty) &&
+                  _teacherUnavailKeys.contains('$day|$slotStartTime');
+
+              return DataCell(
+                DragTarget<TimetableEntry>(
+                  onWillAccept: (data) => !isBreak && !isUnavailableForTeacher,
+                  onAccept: (entry) async {
+                    if (isBreak) return;
+                    if (isUnavailableForTeacher &&
+                        (entry.teacher == _selectedTeacherFilter)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Créneau indisponible pour l\'enseignant.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    // Prevent conflicts (same class or same teacher at same time)
+                    final conflict = _timetableEntries.any(
+                      (e) =>
+                          e.dayOfWeek == day &&
+                          e.startTime == slotStartTime &&
+                          (e.className == entry.className ||
+                              (entry.teacher.isNotEmpty &&
+                                  e.teacher == entry.teacher)) &&
+                          e.id != entry.id,
+                    );
+                    if (conflict) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Conflit détecté (classe/enseignant déjà occupé).',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    // Check teacher unavailability for the entry's teacher
+                    if (entry.teacher.isNotEmpty) {
+                      final yr = await _effectiveAcademicYear();
+                      final un = await _dbService.getTeacherUnavailability(entry.teacher, yr);
+                      final unKeys = un.map((e) => '${e['dayOfWeek']}|${e['startTime']}').toSet();
+                      if (unKeys.contains('$day|$slotStartTime')) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Créneau indisponible pour l\'enseignant.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                    }
+                    // Helper overlap check
+                    bool overlaps(String aS, String aE, String bS, String bE) {
+                      final a1 = _toMin(aS), a2 = _toMin(aE), b1 = _toMin(bS), b2 = _toMin(bE);
+                      return a1 < b2 && b1 < a2;
+                    }
+                    // Insert new (from palette) or move existing
+                    if (entry.id == null) {
+                      final cls = _selectedClass();
+                      if (cls == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Sélectionnez une classe avant d\'ajouter.',
+                            ),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      final toCreate = TimetableEntry(
+                        subject: entry.subject,
+                        teacher: entry.teacher,
+                        className: cls.name,
+                        academicYear: cls.academicYear,
+                        dayOfWeek: day,
+                        startTime: slotStartTime,
+                        endTime: slotEndTime,
+                        room: entry.room,
+                      );
+                      // Room conflict if provided
+                      if (toCreate.room.trim().isNotEmpty) {
+                        final hasRoomConflict = _timetableEntries.any((e) =>
+                          e.id != toCreate.id &&
+                          e.dayOfWeek == day &&
+                          e.room.trim().isNotEmpty &&
+                          e.room.trim() == toCreate.room.trim() &&
+                          overlaps(e.startTime, e.endTime, slotStartTime, slotEndTime)
+                        );
+                        if (hasRoomConflict) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Conflit de salle: déjà occupée.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                      await _dbService.insertTimetableEntry(toCreate);
+                    } else {
+                      // Preserve duration when moving
+                      int? _toMin(String s) {
+                        try {
+                          final p = s.split(':');
+                          return int.parse(p[0]) * 60 + int.parse(p[1]);
+                        } catch (_) {
+                          return null;
+                        }
+                      }
+
+                      String _fmt(int m) {
+                        final h = (m ~/ 60).toString().padLeft(2, '0');
+                        final mi = (m % 60).toString().padLeft(2, '0');
+                        return '$h:$mi';
+                      }
+
+                      final dur = (() {
+                        final a = _toMin(entry.startTime);
+                        final b = _toMin(entry.endTime);
+                        if (a != null && b != null && b > a) return b - a;
+                        final ss = _toMin(slotStartTime);
+                        final se = _toMin(slotEndTime);
+                        return (ss != null && se != null && se > ss)
+                            ? se - ss
+                            : null;
+                      })();
+                      final ns = _toMin(slotStartTime);
+                      final ne = (ns != null && dur != null)
+                          ? ns + dur
+                          : _toMin(slotEndTime);
+                      final newEnd = (ne != null) ? _fmt(ne) : slotEndTime;
+                      final moved = TimetableEntry(
+                        id: entry.id,
+                        subject: entry.subject,
+                        teacher: entry.teacher,
+                        className: entry.className,
+                        academicYear: entry.academicYear,
+                        dayOfWeek: day,
+                        startTime: slotStartTime,
+                        endTime: newEnd,
+                        room: entry.room,
+                      );
+                      // Room conflict if provided
+                      if (moved.room.trim().isNotEmpty) {
+                        final hasRoomConflict = _timetableEntries.any((e) =>
+                          e.id != moved.id &&
+                          e.dayOfWeek == day &&
+                          e.room.trim().isNotEmpty &&
+                          e.room.trim() == moved.room.trim() &&
+                          overlaps(e.startTime, e.endTime, slotStartTime, newEnd)
+                        );
+                        if (hasRoomConflict) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Conflit de salle: déjà occupée.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                      await _dbService.updateTimetableEntry(moved);
+                    }
+                    await _loadData();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Cours placé.'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  },
+                  builder: (ctx, candidate, rejected) {
+                    final isActive = candidate.isNotEmpty;
+                    return GestureDetector(
+                      onTap: () => _showAddEditTimetableEntryDialog(
+                        entry: entriesForSlot.isNotEmpty
+                            ? entriesForSlot.first
+                            : null,
+                      ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: isBreak
+                              ? Colors.grey.withOpacity(0.15)
+                              : isUnavailableForTeacher
+                              ? const Color(0xFFE11D48).withOpacity(0.08)
+                              : entriesForSlot.isNotEmpty
+                              ? AppColors.primaryBlue.withOpacity(0.1)
+                              : (isActive
+                                    ? AppColors.primaryBlue.withOpacity(0.06)
+                                    : Colors.transparent),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isBreak
+                                ? Colors.grey
+                                : isUnavailableForTeacher
+                                ? const Color(0xFFE11D48)
+                                : isActive
+                                ? AppColors.primaryBlue
+                                : (entriesForSlot.isNotEmpty
+                                      ? AppColors.primaryBlue
+                                      : Colors.grey.shade300),
+                          ),
+                        ),
+                        child: entriesForSlot.isNotEmpty
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: entriesForSlot.map((entry) {
+                                  final content = Text(
+                                    '${entry.subject} ${entry.room}\n${entry.teacher} - ${entry.className}',
+                                    style: theme.textTheme.bodyMedium,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                  return Draggable<TimetableEntry>(
+                                    data: entry,
+                                    feedback: Material(
+                                      color: Colors.transparent,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primaryBlue
+                                              .withOpacity(0.9),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${entry.subject} (${entry.startTime})',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    childWhenDragging: Opacity(
+                                      opacity: 0.4,
+                                      child: content,
+                                    ),
+                                    child: content,
+                                  );
+                                }).toList(),
+                              )
+                            : Center(
+                                child: Text(
+                                  isBreak ? 'Pause' : '+',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            }),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSubjectPalette(BuildContext context) {
+    final theme = Theme.of(context);
+    final cls = _selectedClass();
+    if (cls == null || _subjects.isEmpty) return const SizedBox.shrink();
+    Color _subjectColor(String name) {
+      const palette = [
+        Color(0xFF60A5FA),
+        Color(0xFFF472B6),
+        Color(0xFFF59E0B),
+        Color(0xFF34D399),
+        Color(0xFFA78BFA),
+        Color(0xFFFB7185),
+        Color(0xFF38BDF8),
+        Color(0xFF10B981),
+      ];
+      final idx = name.codeUnits.fold<int>(
+        0,
+        (a, b) => (a + b) % palette.length,
+      );
+      return palette[idx];
+    }
+
+    return Container(
+      key: _paletteKey,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 6),
+            child: Text(
+              'Palette (glisser-déposer pour ajouter)',
+              style: theme.textTheme.labelLarge,
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _subjects.map((s) {
+              final teacher = _findTeacherForSubject(s.name, cls)?.name ?? '';
+              final col = _subjectColor(s.name);
+              final chip = Chip(
+                label: Text(
+                  '${s.name}${teacher.isNotEmpty ? ' · $teacher' : ''}',
+                ),
+                backgroundColor: col.withOpacity(0.14),
+              );
+              return Draggable<TimetableEntry>(
+                data: TimetableEntry(
+                  subject: s.name,
+                  teacher: teacher,
+                  className: cls.name,
+                  academicYear: cls.academicYear,
+                  dayOfWeek: '',
+                  startTime: '',
+                  endTime: '',
+                  room: '',
+                ),
+                feedback: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: col.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      s.name,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+                childWhenDragging: Opacity(opacity: 0.4, child: chip),
+                child: chip,
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+          Text('Légende', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: _subjects.take(12).map((s) {
+              final col = _subjectColor(s.name);
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: col.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: col.withOpacity(0.5)),
+                ),
+                child: Text(s.name, style: theme.textTheme.bodySmall),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Advanced stacked grid with merged visual blocks per duration
+  Widget _buildTimetableGrid(BuildContext context) {
+    final theme = Theme.of(context);
+    // Helpers
+    int? toMin(String s) {
+      s = s.trim();
+      final upper = s.toUpperCase();
+      bool pm = upper.endsWith('PM');
+      bool am = upper.endsWith('AM');
+      if (pm || am) {
+        s = s.replaceAll(RegExp(r'(?i)\s*(AM|PM)\s*$'), '');
+      }
+      final parts = s.split(':');
+      if (parts.length >= 2) {
+        int? h = int.tryParse(parts[0]);
+        int? m = int.tryParse(parts[1]);
+        if (h == null || m == null) return null;
+        if (pm && h < 12) h += 12;
+        if (am && h == 12) h = 0;
+        return h * 60 + m;
+      }
+      return null;
+    }
+
+    List<String> bounds() {
+      final set = <String>{};
+      for (final slot in _timeSlots) {
+        final p = slot.split(' - ');
+        if (p.isNotEmpty) set.add(p.first.trim());
+        if (p.length > 1) set.add(p[1].trim());
+      }
+      final list = set.toList();
+      list.sort((a, b) => (toMin(a) ?? 0).compareTo((toMin(b) ?? 0)));
+      return list;
+    }
+
+    final boundaries = bounds();
+    if (boundaries.length < 2) {
+      return _buildTimetableDisplay(context); // fallback
+    }
+    int indexFor(String t) {
+      int? tm = toMin(t);
+      if (tm == null) return 0;
+      int best = 0;
+      int bestDiff = 1 << 30;
+      for (int i = 0; i < boundaries.length; i++) {
+        final diff = ((toMin(boundaries[i]) ?? 0) - tm).abs();
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    Color subjectColor(String name) {
+      const palette = [
+        Color(0xFF60A5FA),
+        Color(0xFFF472B6),
+        Color(0xFFF59E0B),
+        Color(0xFF34D399),
+        Color(0xFFA78BFA),
+        Color(0xFFFB7185),
+        Color(0xFF38BDF8),
+        Color(0xFF10B981),
+      ];
+      final idx = name.codeUnits.fold<int>(
+        0,
+        (a, b) => (a + b) % palette.length,
+      );
+      return palette[idx];
+    }
+
+    // Filter for current view
+    final entries = _timetableEntries.where((e) {
+      final matchesSearch =
+          _searchQuery.isEmpty ||
+          e.className.toLowerCase().contains(_searchQuery) ||
+          e.teacher.toLowerCase().contains(_searchQuery) ||
+          e.subject.toLowerCase().contains(_searchQuery) ||
+          e.room.toLowerCase().contains(_searchQuery);
+      if (_isClassView) {
+        final classKey = _classKeyFromValues(e.className, e.academicYear);
+        return (_selectedClassKey == null || classKey == _selectedClassKey) &&
+            matchesSearch;
+      } else {
+        return (_selectedTeacherFilter == null ||
+                e.teacher == _selectedTeacherFilter) &&
+            matchesSearch;
+      }
+    }).toList();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final leftGutter = 90.0 * _gridZoom;
+        final topGutter = 20.0 * _gridZoom;
+        // Provide finite dimensions even when unconstrained (inside scroll views)
+        const double baseCol = 160.0;
+        const double baseRow = 64.0;
+        final rowCount = boundaries.length - 1;
+        final bool bw = constraints.hasBoundedWidth;
+        final bool bh = constraints.hasBoundedHeight;
+        final double colWidth = bw
+            ? ((constraints.maxWidth - (leftGutter)).clamp(0.0, double.infinity) /
+                    _daysOfWeek.length) *
+                _gridZoom
+            : (baseCol * _gridZoom);
+        final double rowHeight = bh
+            ? ((constraints.maxHeight - (topGutter)).clamp(0.0, double.infinity) /
+                    (rowCount > 0 ? rowCount : 1)) *
+                _gridZoom
+            : (baseRow * _gridZoom);
+        final stackWidth = leftGutter + colWidth * _daysOfWeek.length;
+        final stackHeight =
+            topGutter + rowHeight * (rowCount > 0 ? rowCount : 1);
+        final children = <Widget>[];
+
+        // Day headers
+        for (int d = 0; d < _daysOfWeek.length; d++) {
+          children.add(
+            Positioned(
+              left: leftGutter + d * colWidth,
+              top: 0,
+              width: colWidth,
+              height: topGutter,
+              child: Center(
+                child: Text(_daysOfWeek[d], style: theme.textTheme.titleMedium),
+              ),
+            ),
+          );
+        }
+
+        // Time labels + lines
+        for (int i = 0; i < boundaries.length; i++) {
+          final y = topGutter + i * rowHeight;
+          children.add(
+            Positioned(
+              left: 0,
+              top: y - 8,
+              width: leftGutter - 10,
+              height: 16,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Text(boundaries[i], style: theme.textTheme.bodySmall),
+              ),
+            ),
+          );
+          children.add(
+            Positioned(
+              left: leftGutter,
+              right: 0,
+              top: y,
+              height: 1,
+              child: Container(color: theme.dividerColor.withOpacity(0.3)),
+            ),
+          );
+        }
+
+        // Break overlay
+        for (int i = 0; i < rowCount; i++) {
+          final slot = '${boundaries[i]} - ${boundaries[i + 1]}';
+          if (_breakSlots.contains(slot)) {
+            children.add(
+              Positioned(
+                left: leftGutter,
+                top: topGutter + i * rowHeight,
+                width: colWidth * _daysOfWeek.length,
+                height: rowHeight,
+                child: Container(color: Colors.grey.withOpacity(0.12)),
+              ),
+            );
+          }
+        }
+
+        // Teacher unavailability overlay (teacher view)
+        if (!_isClassView &&
+            _selectedTeacherFilter != null &&
+            _selectedTeacherFilter!.isNotEmpty) {
+          for (int i = 0; i < rowCount; i++) {
+            for (int d = 0; d < _daysOfWeek.length; d++) {
+              final key = '${_daysOfWeek[d]}|${boundaries[i]}';
+              if (_teacherUnavailKeys.contains(key)) {
+                children.add(
+                  Positioned(
+                    left: leftGutter + d * colWidth,
+                    top: topGutter + i * rowHeight,
+                    width: colWidth,
+                    height: rowHeight,
+                    child: Container(
+                      color: const Color(0xFFE11D48).withOpacity(0.08),
+                    ),
+                  ),
+                );
+              }
+            }
+          }
+        }
+
+        // Drop zones per (day, segment)
+        for (int i = 0; i < rowCount; i++) {
+          final slotStart = boundaries[i];
+          final slotEnd = boundaries[i + 1];
+          for (int d = 0; d < _daysOfWeek.length; d++) {
+            final isBreak = _breakSlots.contains('$slotStart - $slotEnd');
+            final isUnavailable =
+                !_isClassView &&
+                (_selectedTeacherFilter != null &&
+                    _selectedTeacherFilter!.isNotEmpty) &&
+                _teacherUnavailKeys.contains('${_daysOfWeek[d]}|$slotStart');
+            children.add(
+              Positioned(
+                left: leftGutter + d * colWidth,
+                top: topGutter + i * rowHeight,
+                width: colWidth,
+                height: rowHeight,
+                child: DragTarget<TimetableEntry>(
+                  onWillAccept: (data) => !isBreak && !isUnavailable,
+                  onAccept: (entry) async {
+                    if (isBreak || isUnavailable) return;
+                    // Additional teacher unavailability check for the entry's teacher
+                    if (entry.teacher.isNotEmpty) {
+                      final yr = await _effectiveAcademicYear();
+                      final un = await _dbService.getTeacherUnavailability(entry.teacher, yr);
+                      final unKeys = un.map((e) => '${e['dayOfWeek']}|${e['startTime']}').toSet();
+                      // For moved blocks, check all covered starts; for new, check slotStart only
+                      final startsToCheck = <String>[];
+                      startsToCheck.add(slotStart);
+                      if (entry.id != null) {
+                        // approximate by checking every boundary between slotStart and slotEnd
+                        int? s = toMin(slotStart);
+                        int? e = toMin(slotEnd);
+                        if (s != null && e != null && e > s) {
+                          for (int bi = 0; bi < boundaries.length - 1; bi++) {
+                            final b = boundaries[bi];
+                            final bm = toMin(b) ?? 0;
+                            if (bm >= s && bm < e) startsToCheck.add(b);
+                          }
+                        }
+                      }
+                      final day = _daysOfWeek[d];
+                      for (final st in startsToCheck) {
+                        if (unKeys.contains('$day|$st')) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Créneau indisponible pour l\'enseignant.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                    }
+                    bool overlapsMM(String aS, String aE, String bS, String bE) {
+                      int? a1 = toMin(aS), a2 = toMin(aE), b1 = toMin(bS), b2 = toMin(bE);
+                      if (a1 == null || a2 == null || b1 == null || b2 == null) return false;
+                      return a1 < b2 && b1 < a2;
+                    }
+                    final conflict = _timetableEntries.any(
+                      (e) =>
+                          e.dayOfWeek == _daysOfWeek[d] &&
+                          e.startTime == slotStart &&
+                          (e.className == entry.className ||
+                              (entry.teacher.isNotEmpty &&
+                                  e.teacher == entry.teacher)) &&
+                          e.id != entry.id,
+                    );
+                    if (conflict) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Conflit détecté.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    if (entry.id == null) {
+                      final cls = _selectedClass();
+                      if (cls == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Sélectionnez une classe.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      final toCreate = TimetableEntry(
+                        subject: entry.subject,
+                        teacher: entry.teacher,
+                        className: cls.name,
+                        academicYear: cls.academicYear,
+                        dayOfWeek: _daysOfWeek[d],
+                        startTime: slotStart,
+                        endTime: slotEnd,
+                        room: entry.room,
+                      );
+                      // Room conflict if provided
+                      if (toCreate.room.trim().isNotEmpty) {
+                        final hasRoomConflict = _timetableEntries.any((e) =>
+                          e.id != toCreate.id &&
+                          e.dayOfWeek == _daysOfWeek[d] &&
+                          e.room.trim().isNotEmpty &&
+                          e.room.trim() == toCreate.room.trim() &&
+                          overlapsMM(e.startTime, e.endTime, slotStart, slotEnd)
+                        );
+                        if (hasRoomConflict) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Conflit de salle: déjà occupée.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                      await _dbService.insertTimetableEntry(toCreate);
+                    } else {
+                      int? m(String s) => toMin(s);
+                      String fmt(int v) =>
+                          '${(v ~/ 60).toString().padLeft(2, '0')}:${(v % 60).toString().padLeft(2, '0')}';
+                      final dur = (() {
+                        final a = m(entry.startTime);
+                        final b = m(entry.endTime);
+                        if (a != null && b != null && b > a) return b - a;
+                        final ss = m(slotStart);
+                        final se = m(slotEnd);
+                        return (ss != null && se != null && se > ss)
+                            ? se - ss
+                            : null;
+                      })();
+                      final ns = m(slotStart);
+                      final ne = (ns != null && dur != null)
+                          ? ns + dur
+                          : m(slotEnd);
+                      final newEnd = (ne != null) ? fmt(ne) : slotEnd;
+                      final moved = TimetableEntry(
+                        id: entry.id,
+                        subject: entry.subject,
+                        teacher: entry.teacher,
+                        className: entry.className,
+                        academicYear: entry.academicYear,
+                        dayOfWeek: _daysOfWeek[d],
+                        startTime: slotStart,
+                        endTime: newEnd,
+                        room: entry.room,
+                      );
+                      // Room conflict if provided
+                      if (moved.room.trim().isNotEmpty) {
+                        final hasRoomConflict = _timetableEntries.any((e) =>
+                          e.id != moved.id &&
+                          e.dayOfWeek == _daysOfWeek[d] &&
+                          e.room.trim().isNotEmpty &&
+                          e.room.trim() == moved.room.trim() &&
+                          overlapsMM(e.startTime, e.endTime, slotStart, newEnd)
+                        );
+                        if (hasRoomConflict) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Conflit de salle: déjà occupée.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                      }
+                      await _dbService.updateTimetableEntry(moved);
+                    }
+                    await _loadData();
+                  },
+                  builder: (ctx, cand, rej) => GestureDetector(
+                    onTap: () => _showAddEditTimetableEntryDialog(
+                      prefilledDay: _daysOfWeek[d],
+                      prefilledStart: slotStart,
+                      prefilledEnd: slotEnd,
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+            );
+          }
+        }
+
+    // Render entries as positioned blocks
+    for (final e in entries) {
+          final dayIndex = _daysOfWeek.indexOf(e.dayOfWeek);
+          if (dayIndex < 0) continue;
+          final sIdx = indexFor(e.startTime);
+          int eIdx = indexFor(e.endTime);
+          if (eIdx <= sIdx) eIdx = (sIdx + 1).clamp(0, boundaries.length - 1);
+          final top = topGutter + sIdx * rowHeight + 2;
+          final height = (eIdx - sIdx) * rowHeight - 4;
+          final color = subjectColor(e.subject);
+          final text =
+              '${e.subject} ${e.room}\n${e.teacher} - ${e.className}\n${e.startTime} - ${e.endTime}';
+          final content = Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withOpacity(0.8)),
+            ),
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+      children.add(
+        Positioned(
+          left: leftGutter + dayIndex * colWidth + 2,
+          top: top,
+          width: colWidth - 4,
+          height: height > 28 ? height : 28,
+          child: Draggable<TimetableEntry>(
+            data: e,
+            feedback: Material(color: Colors.transparent, child: content),
+            childWhenDragging: Opacity(opacity: 0.4, child: content),
+            child: GestureDetector(
+              onTap: () => _showAddEditTimetableEntryDialog(entry: e),
+              child: content,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Empty-state overlay with quick actions when no entries
+    if (entries.isEmpty) {
+      Widget actionButton({required IconData icon, required String label, required VoidCallback onPressed, Color? color}) {
+        return ElevatedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 18),
+          label: Text(label),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color ?? theme.colorScheme.primary,
+            foregroundColor: Colors.white,
+          ),
+        );
+      }
+      children.add(
+        Positioned.fill(
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              constraints: const BoxConstraints(maxWidth: 560),
+              decoration: BoxDecoration(
+                color: theme.cardColor.withOpacity(0.96),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                boxShadow: [
+                  BoxShadow(color: theme.shadowColor.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Icon(Icons.calendar_today, color: theme.colorScheme.primary, size: 28),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Aucun cours à afficher',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _isClassView
+                        ? 'Ajoutez un cours pour la classe sélectionnée, ou utilisez la génération automatique.'
+                        : 'Ajoutez un cours pour l\'enseignant sélectionné, ou utilisez la génération automatique.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      actionButton(
+                        icon: Icons.add,
+                        label: 'Ajouter un cours',
+                        onPressed: () {
+                          Navigator.of(context).popUntil((_) => true); // ensure overlay closes if opened elsewhere
+                          _showAddEditTimetableEntryDialog();
+                        },
+                      ),
+                      actionButton(
+                        icon: Icons.auto_mode,
+                        label: 'Auto‑générer',
+                        color: Colors.green,
+                        onPressed: () async {
+                          if (_isClassView) {
+                            await _autoGenerateForSelectedClass();
+                          } else {
+                            await _autoGenerateForSelectedTeacher();
+                          }
+                        },
+                      ),
+                      actionButton(
+                        icon: Icons.tune,
+                        label: 'Paramètres',
+                        color: Colors.orange,
+                        onPressed: () {
+                          setState(() { _tabController.index = 0; });
+                        },
+                      ),
+                      actionButton(
+                        icon: Icons.help_outline,
+                        label: 'Aide',
+                        color: theme.colorScheme.secondary,
+                        onPressed: _showTimetableHelp,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: stackWidth.isFinite ? stackWidth : null,
+      height: stackHeight.isFinite ? stackHeight : null,
+      child: Stack(children: children),
+        );
+      },
+    );
+  }
+
+  Future<void> _autoGenerateForSelectedClass() async {
+    final cls = _classFromKey(_selectedClassKey);
+    if (cls == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez sélectionner une classe.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    bool clearExisting = false;
+    int sessionsPerSubject = 1;
+    int teacherMaxPerDay = 0;
+    int classMaxPerDay = 0;
+    int subjectMaxPerDay = 0;
+
+    final confirmed = await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            backgroundColor: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Text('Auto-générer pour la classe'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Classe: ${_classLabel(cls)}'),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: clearExisting,
+                  onChanged: (v) => setState(() => clearExisting = v ?? false),
+                  title: const Text("Vider l'emploi du temps avant génération"),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Séances par matière (hebdo)'),
+                    DropdownButton<int>(
+                      value: sessionsPerSubject,
+                      items: const [1, 2, 3]
+                          .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => sessionsPerSubject = v ?? 1),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Max cours/jour (classe)'),
+                    DropdownButton<int>(
+                      value: classMaxPerDay,
+                      items: const [0, 3, 4, 5, 6, 7, 8]
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => classMaxPerDay = v ?? 0),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Max séances/jour par matière'),
+                    DropdownButton<int>(
+                      value: subjectMaxPerDay,
+                      items: const [0, 1, 2, 3]
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => subjectMaxPerDay = v ?? 0),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Max cours/jour par enseignant'),
+                    DropdownButton<int>(
+                      value: teacherMaxPerDay,
+                      items: const [0, 3, 4, 5, 6, 7, 8]
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => teacherMaxPerDay = v ?? 0),
+                    ),
+                  ],
+                ),
+],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Annuler'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Générer'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (confirmed != true) return;
+
+    // After dialog closes, run generation
+    // Use per-class breaks if configured
+    final classKey = _classKey(cls);
+    final map = await ttp.loadClassBreakSlotsMap();
+    final effectiveBreaks = map[classKey] ?? _breakSlots;
+    final created = await _scheduling.autoGenerateForClass(
+      targetClass: cls,
+      daysOfWeek: _daysOfWeek,
+      timeSlots: _timeSlots,
+      breakSlots: effectiveBreaks,
+      clearExisting: clearExisting,
+      sessionsPerSubject: sessionsPerSubject,
+      teacherMaxPerDay: teacherMaxPerDay == 0 ? null : teacherMaxPerDay,
+      classMaxPerDay: classMaxPerDay == 0 ? null : classMaxPerDay,
+      subjectMaxPerDay: subjectMaxPerDay == 0 ? null : subjectMaxPerDay,
+      optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+      limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
+      excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
+    );
+    await _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Génération terminée: $created cours ajoutés.'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Future<void> _autoGenerateForSelectedTeacher() async {
+    if (_selectedTeacherFilter == null || _selectedTeacherFilter!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez sélectionner un enseignant.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final teacher = _teachers.firstWhere(
+      (t) => t.name == _selectedTeacherFilter,
+      orElse: () => Staff.empty(),
+    );
+    if (teacher.id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enseignant introuvable.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    bool clearExisting = false;
+    int sessionsPerSubject = 1;
+    int teacherMaxPerDay = 0;
+    int weeklyHours = teacher.weeklyHours ?? 0;
+    final List<int> weeklyHoursOptions = [0, 5, 10, 12, 15, 18, 20, 24, 30, 36, 40];
+    if (weeklyHours != 0 && !weeklyHoursOptions.contains(weeklyHours)) {
+      weeklyHoursOptions.insert(1, weeklyHours);
+    }
+    int subjectMaxPerDay = 0;
+    int classMaxPerDay = 0;
+
+    final confirmed = await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            backgroundColor: Theme.of(context).cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: const Text("Auto-générer pour l'enseignant"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Enseignant: ${teacher.name}'),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: clearExisting,
+                  onChanged: (v) => setState(() => clearExisting = v ?? false),
+                  title: const Text('Vider ses cours avant génération'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Séances par matière (hebdo)'),
+                    DropdownButton<int>(
+                      value: sessionsPerSubject,
+                      items: const [1, 2, 3]
+                          .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => sessionsPerSubject = v ?? 1),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Heures hebdomadaires à enseigner'),
+                    DropdownButton<int>(
+                      value: weeklyHours,
+                      items: weeklyHoursOptions
+                          .map((n) => DropdownMenuItem<int>(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => weeklyHours = v ?? 0),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Max cours/jour (classe)'),
+                    DropdownButton<int>(
+                      value: classMaxPerDay,
+                      items: const [0, 3, 4, 5, 6, 7, 8]
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => classMaxPerDay = v ?? 0),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Max séances/jour par matière'),
+                    DropdownButton<int>(
+                      value: subjectMaxPerDay,
+                      items: const [0, 1, 2, 3]
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => subjectMaxPerDay = v ?? 0),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Max cours/jour par enseignant'),
+                    DropdownButton<int>(
+                      value: teacherMaxPerDay,
+                      items: const [0, 3, 4, 5, 6, 7, 8]
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .toList(),
+                      onChanged: (v) => setState(() => teacherMaxPerDay = v ?? 0),
+                    ),
+                  ],
+                ),
+],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Annuler'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Générer'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    // Persist weekly hours preference for this teacher
+    try {
+      await _dbService.updateTeacherWeeklyHours(
+        teacher.id,
+        weeklyHours == 0 ? null : weeklyHours,
+      );
+    } catch (_) {}
+
+    // Construire l'union des pauses des classes de cet enseignant
+    final currentYear = await _effectiveAcademicYear();
+    final classBreaksMap = await ttp.loadClassBreakSlotsMap();
+    final Set<String> effectiveBreaks = Set<String>.from(_breakSlots);
+    for (final className in teacher.classes) {
+      final cls = _classes.firstWhere(
+        (c) => c.name == className && c.academicYear == currentYear,
+        orElse: () => Class(name: className, academicYear: currentYear),
+      );
+      final key = _classKey(cls);
+      if (classBreaksMap.containsKey(key)) {
+        effectiveBreaks.addAll(classBreaksMap[key]!);
+      }
+    }
+    final created = _saturateAll
+        ? await _scheduling.autoSaturateForTeacher(
+            teacher: teacher,
+            daysOfWeek: _daysOfWeek,
+            timeSlots: _timeSlots,
+            breakSlots: effectiveBreaks,
+            clearExisting: clearExisting,
+            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+          )
+        : await _scheduling.autoGenerateForTeacher(
+            teacher: teacher,
+            daysOfWeek: _daysOfWeek,
+            timeSlots: _timeSlots,
+            breakSlots: effectiveBreaks,
+            clearExisting: clearExisting,
+            sessionsPerSubject: sessionsPerSubject,
+            teacherMaxPerDay: teacherMaxPerDay == 0 ? null : teacherMaxPerDay,
+            teacherWeeklyHours: weeklyHours,
+            subjectMaxPerDay: subjectMaxPerDay == 0 ? null : subjectMaxPerDay,
+            classMaxPerDay: classMaxPerDay == 0 ? null : classMaxPerDay,
+            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
+            excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
+          );
+    await _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Génération terminée: $created cours ajoutés.'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  Future<void> _showEditGridDialog() async {
+    final days = List<String>.from(_daysOfWeek);
+    final slots = List<String>.from(_timeSlots);
+    final breaks = Set<String>.from(_breakSlots);
+
+    final daysController = TextEditingController();
+    final slotStartController = TextEditingController();
+    final slotEndController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text('Éditer jours / créneaux / pauses'),
+          content: SizedBox(
+            width: 600,
+            child: SingleChildScrollView(
+              child: StatefulBuilder(
+                builder: (context, setState) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Jours', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      children: days
+                          .map(
+                            (d) => Chip(
+                              label: Text(d),
+                              onDeleted: () {
+                                setState(() {
+                                  days.remove(d);
+                                });
+                              },
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: daysController,
+                            decoration: const InputDecoration(
+                              labelText: 'Ajouter un jour (ex: Dimanche)',
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            final v = daysController.text.trim();
+                            if (v.isNotEmpty && !days.contains(v)) {
+                              setState(() => days.add(v));
+                              daysController.clear();
+                            }
+                          },
+                          child: const Text('Ajouter'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Créneaux (HH:mm - HH:mm)',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: slots
+                          .map(
+                            (s) => InputChip(
+                              label: Text(s),
+                              onDeleted: () {
+                                setState(() => slots.remove(s));
+                              },
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: slotStartController,
+                            decoration: const InputDecoration(
+                              labelText: 'Début (ex: 08:00)',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: slotEndController,
+                            decoration: const InputDecoration(
+                              labelText: 'Fin (ex: 09:00)',
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            final a = slotStartController.text.trim();
+                            final b = slotEndController.text.trim();
+                            if (a.isNotEmpty && b.isNotEmpty) {
+                              final slot = '$a - $b';
+                              if (!slots.contains(slot)) {
+                                setState(() => slots.add(slot));
+                                slotStartController.clear();
+                                slotEndController.clear();
+                              }
+                            }
+                          },
+                          child: const Text('Ajouter'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Pauses (sélectionner les créneaux à marquer comme pause)',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Column(
+                      children: slots
+                          .map(
+                            (s) => CheckboxListTile(
+                              title: Text(s),
+                              value: breaks.contains(s),
+                              onChanged: (v) {
+                                setState(() {
+                                  if (v == true) {
+                                    breaks.add(s);
+                                  } else {
+                                    breaks.remove(s);
+                                  }
+                                });
+                              },
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          )
+                          .toList(),
+                    ),
+
+                    const SizedBox(height: 12),
+                    Text(
+                      'Appliquer ces pauses aux classes',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    _ClassMultiSelect(
+                      allClasses: _classes,
+                      selectedDefault: _selectedClassKey != null
+                          ? {_selectedClassKey!}
+                          : <String>{},
+                      toKey: _classKey,
+                      onApply: (selectedKeys) async {
+                        await ttp.saveClassBreaksForClasses(selectedKeys, breaks);
+                        // Reload mapping locally
+                        final map = await ttp.loadClassBreakSlotsMap();
+                        setState(() {
+                          _classBreakSlotsMap = map;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fermer'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                await ttp.saveDays(days);
+                await ttp.saveSlots(slots);
+                await ttp.saveBreakSlots(breaks);
+                Navigator.of(context).pop();
+                await _loadData();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Configuration enregistrée.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showTeacherUnavailabilityDialog() async {
+    if (_selectedTeacherFilter == null || _selectedTeacherFilter!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez sélectionner un enseignant.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final teacherName = _selectedTeacherFilter!;
+    final year = await _effectiveAcademicYear();
+    // Local editable copy
+    final Set<String> edits = Set<String>.from(_teacherUnavailKeys);
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          backgroundColor: theme.cardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: Text('Indisponibilités • $teacherName'),
+          content: SizedBox(
+            width: 720,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _daysOfWeek.map((day) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 4),
+                        child: Text(day, style: theme.textTheme.titleSmall),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _timeSlots.map((slot) {
+                          final slotStart = slot.split(' - ').first;
+                          final key = '$day|$slotStart';
+                          final checked = edits.contains(key);
+                          return FilterChip(
+                            selected: checked,
+                            label: Text(slot),
+                            onSelected: (v) {
+                              setState(() {
+                                if (v) {
+                                  edits.add(key);
+                                } else {
+                                  edits.remove(key);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Fermer'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final rows = edits.map((k) {
+                  final parts = k.split('|');
+                  return {'dayOfWeek': parts[0], 'startTime': parts[1]};
+                }).toList();
+                await _dbService.saveTeacherUnavailability(
+                  teacherName: teacherName,
+                  academicYear: year,
+                  slots: rows,
+                );
+                Navigator.of(context).pop();
+                await _loadTeacherUnavailability(teacherName, year);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Indisponibilités enregistrées.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Enregistrer'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Copied _buildHeader method from grades_page.dart
+  Widget _buildHeader(BuildContext context, bool isDarkMode, bool isDesktop) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: theme.dividerColor.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.calendar_today, // Changed icon to calendar_today
+                      color: Colors.white,
+                      size: isDesktop ? 32 : 24,
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Gestion des Emplois du Temps', // Changed title
+                        style: TextStyle(
+                          fontSize: isDesktop ? 32 : 24,
+                          fontWeight: FontWeight.bold,
+                          color: theme.textTheme.bodyLarge?.color,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Créez et gérez les plannings de cours par classe et par enseignant.', // Changed description
+                        style: TextStyle(
+                          fontSize: isDesktop ? 16 : 14,
+                          color: theme.textTheme.bodyMedium?.color?.withOpacity(
+                            0.7,
+                          ),
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: theme.dividerColor.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.notifications_outlined,
+                      color: theme.iconTheme.color,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Help icon opens a top-right modal with info & shortcuts
+                  GestureDetector(
+                    onTap: _showTimetableHelp,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: theme.dividerColor.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.help_outline,
+                        color: theme.iconTheme.color,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12), // Add spacing
+          TextField(
+            controller: _searchController,
+            focusNode: _searchFocusNode,
+            decoration: InputDecoration(
+              hintText: 'Rechercher un emploi du temps...',
+              hintStyle: TextStyle(
+                color: theme.textTheme.bodyMedium?.color?.withOpacity(0.6),
+              ),
+              prefixIcon: Icon(Icons.search, color: theme.iconTheme.color),
+              filled: true,
+              fillColor: theme.cardColor,
+              contentPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: theme.dividerColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: theme.dividerColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 2,
+                ),
+              ),
+            ),
+            onChanged: (value) => setState(() => _searchQuery = value.trim()),
+            style: theme.textTheme.bodyLarge,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddEditTimetableEntryDialog({
+    TimetableEntry? entry,
+    String? prefilledDay,
+    String? prefilledStart,
+    String? prefilledEnd,
+  }) {
+    final _formKey = GlobalKey<FormState>();
+    final scaffoldMessenger = ScaffoldMessenger.of(
+      context,
+    ); // Get ScaffoldMessengerState here
+    String? selectedSubject = entry?.subject;
+    String? selectedTeacher = entry?.teacher;
+    String? selectedClassKey = entry != null
+        ? _classKeyFromValues(entry.className, entry.academicYear)
+        : _selectedClassKey;
+    String? selectedDay = entry?.dayOfWeek ?? prefilledDay;
+    TextEditingController startTimeController = TextEditingController(
+      text: entry?.startTime ?? prefilledStart,
+    );
+    TextEditingController endTimeController = TextEditingController(
+      text: entry?.endTime ?? prefilledEnd,
+    );
+    TextEditingController roomController = TextEditingController(
+      text: entry?.room,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Row(
+                children: [
+                  Icon(
+                    entry == null ? Icons.add_box : Icons.edit,
+                    color: AppColors.primaryBlue,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      entry == null
+                          ? 'Ajouter un cours à l\'emploi du temps'
+                          : 'Modifier le cours',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+        content: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Matière',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.book_outlined),
+                  ),
+                  isDense: true,
+                  isExpanded: true,
+                  value: (() {
+                    final items = _subjects.map((s) => s.name).toSet();
+                    return (selectedSubject != null &&
+                            items.contains(selectedSubject))
+                        ? selectedSubject
+                        : null;
+                  })(),
+                  items: _subjects
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s.name,
+                          child: Text(s.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => selectedSubject = value,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Enseignant',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outlined),
+                  ),
+                  isDense: true,
+                  isExpanded: true,
+                  value: (() {
+                    final items = _teachers.map((t) => t.name).toSet();
+                    return (selectedTeacher != null &&
+                            items.contains(selectedTeacher))
+                        ? selectedTeacher
+                        : null;
+                  })(),
+                  items: _teachers
+                      .map(
+                        (t) => DropdownMenuItem(
+                          value: t.name,
+                          child: Text(t.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => selectedTeacher = value,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Classe',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.class_outlined),
+                  ),
+                  isDense: true,
+                  isExpanded: true,
+                  value: (() {
+                    final items = _classes.map((c) => _classKey(c)).toSet();
+                    if (selectedClassKey != null &&
+                        items.contains(selectedClassKey)) {
+                      return selectedClassKey;
+                    }
+                    if (_selectedClassKey != null &&
+                        items.contains(_selectedClassKey)) {
+                      return _selectedClassKey;
+                    }
+                    return null;
+                  })(),
+                  items: _classes
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: _classKey(c),
+                          child: Text(_classLabel(c)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => selectedClassKey = value,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: 'Jour de la semaine',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                  ),
+                  isDense: true,
+                  isExpanded: true,
+                  value: (() {
+                    return (selectedDay != null &&
+                            _daysOfWeek.contains(selectedDay))
+                        ? selectedDay
+                        : null;
+                  })(),
+                  items: _daysOfWeek
+                      .map((d) => DropdownMenuItem(value: d, child: Text(d)))
+                      .toList(),
+                  onChanged: (value) => selectedDay = value,
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: startTimeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Heure de début',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.access_time_outlined),
+                  ),
+                  readOnly: true,
+                  onTap: () async {
+                    final TimeOfDay? picked = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    if (picked != null) {
+                      final m = picked.hour * 60 + picked.minute;
+                      startTimeController.text = _fmtHHmm(m);
+                    }
+                  },
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: endTimeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Heure de fin',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.access_time_outlined),
+                  ),
+                  readOnly: true,
+                  onTap: () async {
+                    final TimeOfDay? picked = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    if (picked != null) {
+                      final m = picked.hour * 60 + picked.minute;
+                      endTimeController.text = _fmtHHmm(m);
+                    }
+                  },
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Champ requis' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: roomController,
+                  decoration: const InputDecoration(
+                    labelText: 'Salle',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.room_outlined),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (_formKey.currentState!.validate()) {
+                final classData = _classFromKey(selectedClassKey);
+                if (classData == null) {
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Classe introuvable. Veuillez réessayer.'),
+                    ),
+                  );
+                  return;
+                }
+                // Normalize time input to HH:mm already done by pickers; ensure clean
+                String sDay = selectedDay!;
+                String sStart = startTimeController.text.trim();
+                String sEnd = endTimeController.text.trim();
+                String sRoom = (roomController.text).trim();
+                // Room conflict (overlap on same room)
+                bool overlaps(String aS, String aE, String bS, String bE) {
+                  final a1 = _toMin(aS), a2 = _toMin(aE), b1 = _toMin(bS), b2 = _toMin(bE);
+                  return a1 < b2 && b1 < a2;
+                }
+                if (sRoom.isNotEmpty) {
+                  final hasRoomConflict = _timetableEntries.any((e) =>
+                    (entry == null || e.id != entry!.id) &&
+                    e.dayOfWeek == sDay &&
+                    e.room.trim().isNotEmpty &&
+                    e.room.trim() == sRoom &&
+                    overlaps(e.startTime, e.endTime, sStart, sEnd)
+                  );
+                  if (hasRoomConflict) {
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Conflit de salle: déjà occupée.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                }
+                // Teacher unavailability at start time
+                if ((selectedTeacher ?? '').isNotEmpty) {
+                  final yr = await _effectiveAcademicYear();
+                  final un = await _dbService.getTeacherUnavailability(selectedTeacher!, yr);
+                  final unKeys = un.map((e) => '${e['dayOfWeek']}|${e['startTime']}').toSet();
+                  if (unKeys.contains('$sDay|$sStart')) {
+                    scaffoldMessenger.showSnackBar(
+                      const SnackBar(
+                        content: Text('Créneau indisponible pour l\'enseignant.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                }
+                final newEntry = TimetableEntry(
+                  id: entry?.id, // Pass existing ID if editing
+                  subject: selectedSubject!,
+                  teacher: selectedTeacher!,
+                  className: classData.name,
+                  academicYear: classData.academicYear,
+                  dayOfWeek: sDay,
+                  startTime: sStart,
+                  endTime: sEnd,
+                  room: sRoom,
+                );
+
+                if (entry == null) {
+                  await _dbService.insertTimetableEntry(newEntry);
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Cours ajouté avec succès.'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } else {
+                  await _dbService.updateTimetableEntry(newEntry);
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Cours modifié avec succès.'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+                Navigator.of(context).pop();
+                _loadData(); // Reload data to update the display
+              }
+            },
+            child: Text(entry == null ? 'Enregistrer' : 'Modifier'),
+          ),
+          if (entry != null) // Add delete button for existing entries
+            ElevatedButton(
+              onPressed: () async {
+                // Show confirmation dialog
+                final bool confirmDelete =
+                    await showDialog(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          backgroundColor: Theme.of(context).cardColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          title: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                color: Color(0xFFE11D48),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Confirmer la suppression',
+                                style: TextStyle(
+                                  color: Color(0xFFE11D48),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: const Text(
+                            'Êtes-vous sûr de vouloir supprimer ce cours ?',
+                          ),
+                          actions: <Widget>[
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text('Annuler'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE11D48),
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Supprimer'),
+                            ),
+                          ],
+                        );
+                      },
+                    ) ??
+                    false; // In case dialog is dismissed by tapping outside
+
+                if (confirmDelete) {
+                  final TimetableEntry? deletedEntry =
+                      entry; // Store the entry before deletion
+                  await _dbService.deleteTimetableEntry(
+                    deletedEntry!.id!,
+                  ); // Delete the entry
+                  Navigator.of(context).pop(); // Close the add/edit dialog
+                  _loadData(); // Reload data to update the display
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text('Cours supprimé avec succès.'),
+                      backgroundColor: Colors.green,
+                      action: SnackBarAction(
+                        label: 'Annuler',
+                        onPressed: () async {
+                          if (deletedEntry != null) {
+                            await _dbService.insertTimetableEntry(deletedEntry);
+                            _loadData(); // Reload data to update the display
+                            // Dismiss the current dialog first if it's still open
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                            // Now show the SnackBar from the main Scaffold's context
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Suppression annulée.'),
+                                backgroundColor: Colors.blue,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Supprimer'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startTimetableTour() async {
+    int step = 0;
+    final steps = [
+      {
+        'title': 'Vue et filtres',
+        'body': 'Basculez Classe/Enseignant et choisissez la classe ou l\'enseignant à afficher. Vous pouvez aussi rechercher par nom, matière ou salle.',
+      },
+      {
+        'title': 'Barre d\'outils d\'affichage',
+        'body': 'Ajustez le zoom, affichez/masquez les résumés et la liste des classes, ou passez en plein écran pour maximiser la grille.',
+      },
+      {
+        'title': 'Grille d\'emploi du temps',
+        'body': 'Glissez‑déposez un cours pour le déplacer. Les conflits (salle occupée, indisponibilité enseignant) sont signalés.',
+      },
+      {
+        'title': 'Palette des matières',
+        'body': 'Glissez une matière de la palette vers la grille pour créer un cours dans le créneau visé.',
+      },
+      {
+        'title': 'Paramètres & Auto‑génération',
+        'body': 'Dans l\'onglet Paramètres, configurez jours/créneaux/pauses et générez automatiquement pour classes ou enseignants.',
+      },
+    ];
+
+    Rect _rectForKey(GlobalKey key) {
+      try {
+        final ctx = key.currentContext;
+        if (ctx == null) return Rect.zero;
+        final box = ctx.findRenderObject() as RenderBox?;
+        if (box == null || !box.attached) return Rect.zero;
+        final off = box.localToGlobal(Offset.zero);
+        return off & box.size;
+      } catch (_) {
+        return Rect.zero;
+      }
+    }
+
+    GlobalKey? _keyForStep(int s) {
+      switch (s) {
+        case 0: return _filtersBarKey;
+        case 1: return _viewControlsKey;
+        case 2: return _gridAreaKey;
+        case 3: return _paletteKey;
+        case 4: return _tabBarKey;
+      }
+      return null;
+    }
+
+    Future<void> showStep() async {
+      final highlightKey = _keyForStep(step);
+      final rect = highlightKey != null ? _rectForKey(highlightKey) : Rect.zero;
+      await showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Tour',
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 160),
+        pageBuilder: (context, a1, a2) {
+          final theme = Theme.of(context);
+          return Stack(
+            children: [
+              // Spotlight scrim
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _SpotlightPainter(
+                    target: rect.inflate(8),
+                    color: Colors.black.withOpacity(0.55),
+                    radius: 12,
+                  ),
+                ),
+              ),
+              SafeArea(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                    boxShadow: [
+                      BoxShadow(color: theme.shadowColor.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4)),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header with colored gradient
+                      Builder(builder: (context) {
+                        final accents = [
+                          theme.colorScheme.primary,
+                          theme.colorScheme.secondary,
+                          Colors.teal,
+                          Colors.orange,
+                          Colors.purple,
+                        ];
+                        final Color a = accents[step % accents.length];
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: [a, a.withOpacity(0.7)]),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.tour, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Tour guidé — ${steps[step]['title']}',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Ignorer le tour',
+                                icon: const Icon(Icons.close, color: Colors.white),
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  ttp.saveTimetableTourSeen(true);
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: Text(
+                          steps[step]['body'] as String,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: List.generate(steps.length, (i) {
+                            final active = i == step;
+                            return Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              width: active ? 12 : 8,
+                              height: active ? 12 : 8,
+                              decoration: BoxDecoration(
+                                color: active ? theme.colorScheme.primary : theme.dividerColor.withOpacity(0.6),
+                                shape: BoxShape.circle,
+                              ),
+                            );
+                          }),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Étape ${step + 1}/${steps.length}', style: theme.textTheme.bodySmall),
+                            Row(
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    ttp.saveTimetableTourSeen(true);
+                                  },
+                                  child: const Text('Ignorer'),
+                                ),
+                                const SizedBox(width: 8),
+                                if (step > 0)
+                                  OutlinedButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      step -= 1;
+                                      Future.microtask(showStep);
+                                    },
+                                    child: const Text('Précédent'),
+                                  ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    step += 1;
+                                    if (step < steps.length) {
+                                      Future.microtask(showStep);
+                                    } else {
+                                      ttp.saveTimetableTourSeen(true);
+                                    }
+                                  },
+                                  child: Text(step < steps.length - 1 ? 'Suivant' : 'Terminer'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+            ],
+          );
+        },
+      );
+    }
+
+    await showStep();
+  }
+
+  void _showTimetableHelp() {
+    final theme = Theme.of(context);
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Aide',
+      barrierColor: Colors.black.withOpacity(0.3),
+      transitionDuration: const Duration(milliseconds: 150),
+      pageBuilder: (context, anim1, anim2) {
+        Widget kbd(String label) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceVariant.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+            ),
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          );
+        }
+        Widget tag(String text, Color color) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: color.withOpacity(0.4)),
+            ),
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                margin: const EdgeInsets.only(top: 16, right: 16, left: 16),
+                padding: const EdgeInsets.all(0),
+                constraints: BoxConstraints(
+                  maxWidth: 520,
+                  minWidth: 320,
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.cardColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border:
+                      Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.shadowColor.withOpacity(0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with accent
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Theme.of(context).colorScheme.primary,
+                            Theme.of(context).colorScheme.secondary,
+                          ],
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          topRight: Radius.circular(16),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.help_outline, color: Colors.white),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Aide — Emploi du temps',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            tooltip: 'Fermer',
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Sections descriptives des éléments de l'écran
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.switch_account, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Vue et filtres', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Bascule Classe/Enseignant: change la perspective d\'affichage.'),
+                          Text('• Sélecteur Classe/Enseignant: filtre la vue actuelle selon la sélection.'),
+                          Text('• Recherche: filtre en direct (classe, enseignant, matière, salle).'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.build_circle, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Barre d\'actions', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Ajouter un cours: ouvre la fenêtre de création/édition.'),
+                          Text('• Exporter PDF/Excel: exporte la vue filtrée (classe/enseignant).'),
+                          Text('• Zoom: ajuster l\'échelle de la grille; Réinitialiser: revenir à 100%.'),
+                          Text('• Résumés: afficher/masquer les pastilles de cumul (matières, professeurs, jours).'),
+                          Text('• Liste des classes: afficher/masquer le panneau latéral; redimensionnable.'),
+                          Text('• Plein écran: maximise l\'espace visible (barre d\'outils accessible en haut‑droite).'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.grid_on, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Grille d\'emploi du temps', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Colonnes = jours, lignes = créneaux; les pauses sont grisées.'),
+                          Text('• Glisser‑déposer un cours pour le déplacer; la durée reste constante.'),
+                          Text('• Conflits détectés: salle occupée, indisponibilité enseignant, chevauchements.'),
+                          Text('• Couleur matière: repère visuel cohérent avec la Palette.'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.summarize, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Résumés (pastilles)', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Classe: cumul par matière et par professeur (hebdo).'),
+                          Text('• Classe & Enseignant: cumul par jour.'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.palette_outlined, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Palette des matières', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Glisser une matière vers la grille pour ajouter un cours au créneau.'),
+                          Text('• L\'enseignant proposé dépend des affectations matière/classe.'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.view_sidebar, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Panneau des classes', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Liste des classes (vue Classe) — clic pour changer de classe.'),
+                          Text('• Redimension: glisser la barre verticale; masquable via la barre d\'outils.'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_mode, size: 18),
+                          const SizedBox(width: 6),
+                          Text('Auto‑génération & indisponibilités', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('• Onglet Paramètres: configurer jours, créneaux, pauses et générer pour classes/enseignants.'),
+                          Text('• Vue Enseignant: Indisponibilités pour marquer les créneaux non disponibles.'),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Divider(color: theme.dividerColor.withOpacity(0.3)),
+                    ),
+                    // Fin des sections descriptives
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                      child: Text(
+                        'Cet écran permet de créer et gérer les emplois du temps par classe et par enseignant. '
+                        'Utilisez la barre d’outils pour zoomer, passer en plein écran, afficher les résumés, ou masquer la liste des classes.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primary.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.rocket_launch, size: 18, color: theme.colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Text('Guide rapide', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            // Rangée 1: vrais boutons principaux
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                // Ajouter un cours (même style que l'en-tête)
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () { Navigator.of(context).pop(); _showAddEditTimetableEntryDialog(); },
+                                      icon: const Icon(Icons.add, color: Colors.white),
+                                      label: const Text('Ajouter un cours', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primaryBlue,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Créer rapidement un nouveau cours', AppColors.primaryBlue),
+                                  ],
+                                ),
+                                // Export PDF (même style que l'en-tête)
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () { Navigator.of(context).pop(); _exportTimetableToPdf(exportBy: _isClassView ? 'class' : 'teacher'); },
+                                      icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                                      label: const Text('Exporter PDF', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Exporter la vue en PDF', Colors.red),
+                                  ],
+                                ),
+                                // Export Excel (même style que l'en-tête)
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () { Navigator.of(context).pop(); _exportTimetableToExcel(exportBy: _isClassView ? 'class' : 'teacher'); },
+                                      icon: const Icon(Icons.grid_on, color: Colors.white),
+                                      label: const Text('Exporter Excel', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Exporter la vue en Excel', Colors.green),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            // Rangée 2: actions d'automatisation et de configuration
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async {
+                                        Navigator.of(context).pop();
+                                        if (_isClassView) {
+                                          await _autoGenerateForSelectedClass();
+                                        } else {
+                                          await _autoGenerateForSelectedTeacher();
+                                        }
+                                      },
+                                      icon: const Icon(Icons.auto_mode, color: Colors.white),
+                                      label: const Text('Auto‑générer', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.teal,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Remplir automatiquement sans conflit', Colors.teal),
+                                  ],
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () { Navigator.of(context).pop(); setState(() { _tabController.index = 0; }); },
+                                      icon: const Icon(Icons.tune, color: Colors.white),
+                                      label: const Text('Paramètres', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Configurer jours, créneaux, pauses', Colors.orange),
+                                  ],
+                                ),
+                                if (!_isClassView)
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () async { Navigator.of(context).pop(); await _showTeacherUnavailabilityDialog(); },
+                                        icon: const Icon(Icons.event_busy, color: Colors.white),
+                                        label: const Text('Indisponibilités', style: TextStyle(color: Colors.white)),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.deepPurple,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      tag('Marquer les créneaux non disponibles', Colors.deepPurple),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            // Rangée 3: génération globale & nettoyage
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async { Navigator.of(context).pop(); await _onGenerateForAllClasses(); },
+                                      icon: const Icon(Icons.apartment, color: Colors.white),
+                                      label: const Text('Générer toutes les classes', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primaryBlue,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Génération pour l’ensemble des classes', AppColors.primaryBlue),
+                                  ],
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async { Navigator.of(context).pop(); await _onGenerateForAllTeachers(); },
+                                      icon: const Icon(Icons.groups, color: Colors.white),
+                                      label: const Text('Générer tous les enseignants', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.successGreen,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Génération pour tous les professeurs', AppColors.successGreen),
+                                  ],
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async { Navigator.of(context).pop(); await _onClearTimetable(); },
+                                      icon: const Icon(Icons.clear_all, color: Colors.white),
+                                      label: const Text('Restaurer à vierge', style: TextStyle(color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    tag('Supprimer tous les cours du tableau', Colors.red),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            // Bouton pour démarrer le tour guidé
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: () { Navigator.of(context).pop(); _startTimetableTour(); },
+                                icon: const Icon(Icons.tour),
+                                label: const Text('Démarrer le tour guidé'),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            // Aperçu des contrôles d'affichage réels
+                            Text('Contrôles d\'affichage', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 6),
+                            _buildViewControls(context),
+                            const SizedBox(height: 4),
+                            Text('Zoom, reset, résumés, liste des classes, plein écran', style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Divider(color: theme.dividerColor.withOpacity(0.3)),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.keyboard, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text('Raccourcis clavier', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 8,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    kbd('= / +'), Text('Zoom +', style: theme.textTheme.bodySmall),
+                                    kbd('-'), Text('Zoom −', style: theme.textTheme.bodySmall),
+                                    kbd('F'), Text('Plein écran', style: theme.textTheme.bodySmall),
+                                    kbd('0'), Text('Réinitialiser la vue', style: theme.textTheme.bodySmall),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.tips_and_updates, size: 18),
+                                    const SizedBox(width: 6),
+                                    Text('Astuces', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: const [
+                                    Text('• Glisser la barre verticale pour redimensionner la liste des classes.'),
+                                    Text('• Les préférences d’affichage (zoom, liste, résumés) sont mémorisées.'),
+                                    Text('• En plein écran, la barre d’outils reste accessible en haut à droite.'),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _exportTimetableToPdf({required String exportBy}) async {
+    String? directory = await FilePicker.platform.getDirectoryPath();
+    if (directory == null) return; // User canceled the picker
+
+    if (_schoolInfo == null) {
+      await _loadData(); // Attempt to load data if not already loaded
+      if (_schoolInfo == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Informations de l\'école non disponibles. Veuillez configurer les informations de l\'école dans les paramètres.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    final String currentAcademicYear = await _effectiveAcademicYear();
+
+    final classFilter = _classFromKey(_selectedClassKey);
+    final filteredEntries = _timetableEntries.where((e) {
+      if (exportBy == 'class') {
+        if (classFilter == null) return true;
+        return e.className == classFilter.name &&
+            e.academicYear == classFilter.academicYear;
+      } else {
+        // teacher
+        return _selectedTeacherFilter == null ||
+            e.teacher == _selectedTeacherFilter;
+      }
+    }).toList();
+
+    final classLabel = classFilter != null ? _classLabel(classFilter) : '';
+    final title = exportBy == 'class'
+        ? 'Emploi du temps de la classe $classLabel'
+        : 'Emploi du temps du professeur(e) ${_selectedTeacherFilter ?? ''}';
+
+    final bytes = await PdfService.generateTimetablePdf(
+      schoolInfo: _schoolInfo!,
+      academicYear: currentAcademicYear,
+      daysOfWeek: _daysOfWeek,
+      timeSlots: _timeSlots,
+      timetableEntries: filteredEntries,
+      title: title,
+    );
+
+    final fileName = exportBy == 'class'
+        ? 'emploi du temps de la classe $classLabel.pdf'
+        : 'emploi du temps du professeur(e) ${_selectedTeacherFilter ?? ''}.pdf';
+    final file = File('$directory/$fileName');
+    await file.writeAsBytes(bytes);
+    OpenFile.open(file.path);
+  }
+
+  Future<void> _exportTimetableToExcel({required String exportBy}) async {
+    String? directory = await FilePicker.platform.getDirectoryPath();
+    if (directory == null) return; // User canceled the picker
+
+    var excel = Excel.createExcel();
+    Sheet sheetObject = excel['Emploi du Temps'];
+
+    // Header row
+    sheetObject
+        .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
+        .value = TextCellValue(
+      'Heure',
+    );
+    for (int d = 0; d < _daysOfWeek.length; d++) {
+      sheetObject
+          .cell(CellIndex.indexByColumnRow(columnIndex: d + 1, rowIndex: 0))
+          .value = TextCellValue(
+        _daysOfWeek[d],
+      );
+    }
+
+    Color _subjectColor(String name) {
+      const palette = [
+        Color(0xFF60A5FA),
+        Color(0xFFF472B6),
+        Color(0xFFF59E0B),
+        Color(0xFF34D399),
+        Color(0xFFA78BFA),
+        Color(0xFFFB7185),
+        Color(0xFF38BDF8),
+        Color(0xFF10B981),
+      ];
+      final idx = name.codeUnits.fold<int>(
+        0,
+        (a, b) => (a + b) % palette.length,
+      );
+      return palette[idx];
+    }
+
+    String _hex(Color c) =>
+        '#${c.red.toRadixString(16).padLeft(2, '0')}${c.green.toRadixString(16).padLeft(2, '0')}${c.blue.toRadixString(16).padLeft(2, '0')}';
+
+    final classFilter = _classFromKey(_selectedClassKey);
+    final classLabel = classFilter != null ? _classLabel(classFilter) : '';
+
+    for (int r = 0; r < _timeSlots.length; r++) {
+      final timeSlot = _timeSlots[r];
+      final timeSlotParts = timeSlot.split(' - ');
+      final slotStartTime = timeSlotParts[0];
+      sheetObject
+          .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: r + 1))
+          .value = TextCellValue(
+        timeSlot,
+      );
+      for (int d = 0; d < _daysOfWeek.length; d++) {
+        final day = _daysOfWeek[d];
+        final entriesForSlot = _timetableEntries.where((e) {
+          if (exportBy == 'class') {
+            return e.dayOfWeek == day &&
+                e.startTime == slotStartTime &&
+                (classFilter == null ||
+                    (e.className == classFilter.name &&
+                        e.academicYear == classFilter.academicYear));
+          } else {
+            return e.dayOfWeek == day &&
+                e.startTime == slotStartTime &&
+                (_selectedTeacherFilter == null ||
+                    e.teacher == _selectedTeacherFilter);
+          }
+        }).toList();
+
+        final cell = sheetObject.cell(
+          CellIndex.indexByColumnRow(columnIndex: d + 1, rowIndex: r + 1),
+        );
+        if (entriesForSlot.isNotEmpty) {
+          final first = entriesForSlot.first;
+          final text = entriesForSlot
+              .map(
+                (e) => '${e.subject} ${e.room}\n${e.teacher} - ${e.className}',
+              )
+              .join('\n\n');
+          cell.value = TextCellValue(text);
+          cell.cellStyle = CellStyle(
+            backgroundColorHex: _hex(_subjectColor(first.subject)).excelColor,
+          );
+        } else {
+          cell.value = TextCellValue('');
+        }
+      }
+    }
+
+    final fileName = exportBy == 'class'
+        ? 'emploi du temps de la classe $classLabel.xlsx'
+        : 'emploi du temps du professeur(e) ${_selectedTeacherFilter ?? ''}.xlsx';
+    final file = File('$directory/$fileName');
+    final bytes = excel.encode();
+    if (bytes != null) {
+      await file.writeAsBytes(bytes);
+      OpenFile.open(file.path);
+    }
+  }
+}
+
+class _ClassMultiSelect extends StatefulWidget {
+  final List<Class> allClasses;
+  final Set<String> selectedDefault;
+  final String Function(Class) toKey;
+  final Future<void> Function(Set<String> selectedKeys) onApply;
+  const _ClassMultiSelect({
+    Key? key,
+    required this.allClasses,
+    required this.selectedDefault,
+    required this.toKey,
+    required this.onApply,
+  }) : super(key: key);
+
+  @override
+  State<_ClassMultiSelect> createState() => _ClassMultiSelectState();
+}
+
+class _ClassMultiSelectState extends State<_ClassMultiSelect> {
+  late Set<String> _selected;
+  bool _asc = true;
+  String _search = '';
+  final ScrollController _scrollCtrl = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<String>.from(widget.selectedDefault);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    List<Class> items = List<Class>.from(widget.allClasses);
+    if (_search.isNotEmpty) {
+      items = items
+          .where((c) =>
+              c.name.toLowerCase().contains(_search.toLowerCase()) ||
+              (c.academicYear).toLowerCase().contains(_search.toLowerCase()))
+          .toList();
+    }
+    items.sort((a, b) => _asc
+        ? a.name.compareTo(b.name)
+        : b.name.compareTo(a.name));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Rechercher une classe…',
+                  isDense: true,
+                ),
+                onChanged: (v) => setState(() => _search = v.trim()),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Trier',
+              onPressed: () => setState(() => _asc = !_asc),
+              icon: Icon(_asc ? Icons.sort_by_alpha : Icons.sort),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _selected =
+                  widget.allClasses.map(widget.toKey).toSet()),
+              child: const Text('Tout sélectionner'),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _selected.clear()),
+              child: const Text('Tout désélectionner'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 180,
+          child: Scrollbar(
+            controller: _scrollCtrl,
+            thumbVisibility: true,
+            child: ListView.builder(
+              controller: _scrollCtrl,
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final c = items[index];
+                final key = widget.toKey(c);
+                return CheckboxListTile(
+                  value: _selected.contains(key),
+                  onChanged: (v) {
+                    setState(() {
+                      if (v == true) {
+                        _selected.add(key);
+                      } else {
+                        _selected.remove(key);
+                      }
+                    });
+                  },
+                  title: Text('${c.name} (${c.academicYear})',
+                      style: theme.textTheme.bodyMedium),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                );
+              },
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              await widget.onApply(_selected);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Pauses appliquées aux classes sélectionnées.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            icon: const Icon(Icons.playlist_add_check),
+            label: const Text('Appliquer'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+}
+
+class _SpotlightPainter extends CustomPainter {
+  final Rect target;
+  final Color color;
+  final double radius;
+  _SpotlightPainter({required this.target, required this.color, this.radius = 12});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..blendMode = BlendMode.srcOver;
+    final background = Path()..addRect(Offset.zero & size);
+    final rect = target.isEmpty ? Rect.fromLTWH(size.width / 2 - 40, size.height / 3, 80, 80) : target;
+    final hole = Path()
+      ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+    final diff = Path.combine(PathOperation.difference, background, hole);
+    canvas.drawPath(diff, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SpotlightPainter oldDelegate) {
+    return oldDelegate.target != target || oldDelegate.color != color || oldDelegate.radius != radius;
+  }
+}
