@@ -95,7 +95,7 @@ class _SettingsPageState extends State<SettingsPage>
   String _adminCivilityUniversity = 'M.';
 
   final List<String> _languages = ['Français', 'English', 'العربية', 'Español'];
-  final List<String> _civilites = ['M.', 'Mme', 'Dr.', 'Révérend', 'RP'];
+  final List<String> _civilites = ['M.', 'Mme', 'Dr.', 'Révérend', 'RP.'];
   final List<String> _niveauxScolaires = [
     'Maternelle',
     'Primaire',
@@ -239,14 +239,21 @@ class _SettingsPageState extends State<SettingsPage>
       _selectedLanguage = prefs.getString('language') ?? 'Français';
       _academicYear = prefs.getString('academic_year') ?? '2024-2025';
       _academicYearController.text = _academicYear;
-      _adminCivility = prefs.getString('school_admin_civility') ?? 'M.';
-      _adminCivilityPrimary =
-          prefs.getString('school_civility_primary') ?? 'M.';
-      _adminCivilityCollege =
-          prefs.getString('school_civility_college') ?? 'M.';
-      _adminCivilityLycee = prefs.getString('school_civility_lycee') ?? 'M.';
-      _adminCivilityUniversity =
-          prefs.getString('school_civility_university') ?? 'M.';
+
+      // Load civilities with migration logic
+      String fixCiv(String? val) => (val == 'RP' ? 'RP.' : (val ?? 'M.'));
+
+      _adminCivility = fixCiv(prefs.getString('school_admin_civility'));
+      _adminCivilityPrimary = fixCiv(
+        prefs.getString('school_civility_primary'),
+      );
+      _adminCivilityCollege = fixCiv(
+        prefs.getString('school_civility_college'),
+      );
+      _adminCivilityLycee = fixCiv(prefs.getString('school_civility_lycee'));
+      _adminCivilityUniversity = fixCiv(
+        prefs.getString('school_civility_university'),
+      );
     });
   }
 

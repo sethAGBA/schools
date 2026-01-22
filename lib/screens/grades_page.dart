@@ -11741,7 +11741,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
             data['niveau'] as String,
           ),
           titulaireCivility: 'M.',
-          directorCivility: adminCivility,
+          directorCivility: _resolveCivilityForLevel(
+            info,
+            data['niveau'] as String,
+            adminCivility,
+          ),
           footerNote: footerNote,
           isLandscape: isLandscape,
           useLongFormat: useLongFormat,
@@ -11878,6 +11882,28 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     final resolved = candidate?.trim();
     if (resolved != null && resolved.isNotEmpty) return resolved;
     return schoolInfo.director.trim();
+  }
+
+  String _resolveCivilityForLevel(
+    SchoolInfo schoolInfo,
+    String niveau,
+    String defaultCivility,
+  ) {
+    final n = niveau.trim().toLowerCase();
+    String? candidate;
+    if (n.contains('primaire') || n.contains('maternelle')) {
+      candidate = schoolInfo.civilityPrimary;
+    } else if (n.contains('coll')) {
+      candidate = schoolInfo.civilityCollege;
+    } else if (n.contains('lyc')) {
+      candidate = schoolInfo.civilityLycee;
+    } else if (n.contains('univ')) {
+      candidate = schoolInfo.civilityUniversity;
+    }
+    final resolved = candidate?.trim();
+    return (resolved != null && resolved.isNotEmpty)
+        ? resolved
+        : defaultCivility;
   }
 
   Future<void> _exportClassReportCards() async {
@@ -13423,7 +13449,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
               data['niveau'] as String,
             ),
             titulaireCivility: 'M.',
-            directorCivility: adminCivility,
+            directorCivility: _resolveCivilityForLevel(
+              data['schoolInfo'] as SchoolInfo,
+              data['niveau'] as String,
+              adminCivility,
+            ),
             footerNote: footerNote,
             isLandscape: isLandscape,
             useLongFormat: useLongFormat,
