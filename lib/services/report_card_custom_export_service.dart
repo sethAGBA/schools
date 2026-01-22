@@ -1293,7 +1293,7 @@ class ReportCardCustomExportService {
     pw.Font fontBold,
     pw.Font font,
   ) {
-    final titulaireLabel = _withCivility(titulaireName, titulaireCivility);
+    final titulaireLabel = titulaireName.trim();
     final directorLabel = _withCivility(directorName, directorCivility);
     final titulaire = titulaireLabel.isNotEmpty
         ? titulaireLabel
@@ -1301,6 +1301,7 @@ class ReportCardCustomExportService {
     final director = directorLabel.isNotEmpty
         ? directorLabel
         : '__________________';
+
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [

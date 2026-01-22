@@ -95,7 +95,7 @@ class _SettingsPageState extends State<SettingsPage>
   String _adminCivilityUniversity = 'M.';
 
   final List<String> _languages = ['Français', 'English', 'العربية', 'Español'];
-  final List<String> _civilites = ['M.', 'Mme'];
+  final List<String> _civilites = ['M.', 'Mme', 'Dr.', 'Révérend', 'RP'];
   final List<String> _niveauxScolaires = [
     'Maternelle',
     'Primaire',
