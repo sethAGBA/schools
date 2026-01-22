@@ -454,9 +454,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       if (updateControllers && selectedStudent == student.id) {
         final List<String> standardSubject = [
           'Excellent',
+          'Excellent travail',
           'Très Bien',
+          'Très bien',
+          'Très bon travail',
           'Bien',
+          'Bon travail',
           'Assez Bien',
+          'Assez bien',
           'Passable',
           'Insuffisant',
         ];
@@ -467,12 +472,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
             )) {
           _appreciationControllers[subject]?.text = autoAppr;
         }
+        final classMoy = _calculateClassAverageForSubject(subject);
         if (_moyClasseControllers[subject]?.text.trim().isEmpty == true ||
-            _moyClasseControllers[subject]?.text == '-') {
-          final classMoy = _calculateClassAverageForSubject(subject);
+            _moyClasseControllers[subject]?.text == '-' ||
+            _moyClasseControllers[subject]?.text == '0.00' ||
+            _moyClasseControllers[subject]?.text == '0,00') {
           if (classMoy != null) {
             _moyClasseControllers[subject]?.text = classMoy.toStringAsFixed(2);
           }
+        } else if (classMoy != null && nbEleves == 1) {
+          // Si l'effectif est de 1, la moyenne de classe DOIT correspondre à la note de l'élève
+          _moyClasseControllers[subject]?.text = classMoy.toStringAsFixed(2);
         }
         currentApp = _appreciationControllers[subject]?.text;
         currentMoyClasse = _moyClasseControllers[subject]?.text;
