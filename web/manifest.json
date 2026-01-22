@@ -3,13 +3,8 @@
     "short_name": "school_manager",
     "start_url": ".",
     "display": "standalone",
-<<<<<<< HEAD
-    "background_color": "#hexcode",
-    "theme_color": "#hexcode",
-=======
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
->>>>>>> 523f837 (Update)
     "description": "A new Flutter project.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
@@ -37,8 +32,4 @@
             "purpose": "maskable"
         }
     ]
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 523f837 (Update)

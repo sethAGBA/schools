@@ -4,11 +4,7 @@ PODS:
   - file_selector_macos (0.0.1):
     - FlutterMacOS
   - FlutterMacOS (1.0.0)
-<<<<<<< HEAD
   - open_file_mac (0.0.1):
-=======
-  - open_file_mac (1.0.3):
->>>>>>> 523f837 (Update)
     - FlutterMacOS
   - path_provider_foundation (0.0.1):
     - Flutter
@@ -52,21 +48,12 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
-<<<<<<< HEAD
   file_selector_macos: 6280b52b459ae6c590af5d78fc35c7267a3c4b31
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   open_file_mac: 01874b6d6a2c1485ac9b126d7105b99102dea2cf
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   printing: c4cf83c78fd684f9bc318e6aadc18972aa48f617
   shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
-=======
-  file_selector_macos: 9e9e068e90ebee155097d00e89ae91edb2374db7
-  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  open_file_mac: 76f06c8597551249bdb5e8fd8827a98eae0f4585
-  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
-  printing: c4cf83c78fd684f9bc318e6aadc18972aa48f617
-  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
->>>>>>> 523f837 (Update)
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
 
 PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
