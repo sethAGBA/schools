@@ -264,6 +264,13 @@ class _SchoolDashboardState extends State<SchoolDashboard>
   Set<String>? _permissions;
   bool _licenseActive = false;
   bool _allLicensesConsumed = false;
+  bool _isSidebarCollapsed = false;
+
+  void _toggleSidebar() {
+    setState(() {
+      _isSidebarCollapsed = !_isSidebarCollapsed;
+    });
+  }
 
   @override
   void initState() {
@@ -397,9 +404,10 @@ class _SchoolDashboardState extends State<SchoolDashboard>
                 isDarkMode: widget.isDarkMode,
                 onThemeToggle: widget.onThemeToggle,
                 animationController: _animationController,
-                currentRole: _role,
                 currentPermissions: _permissions,
                 allowedIndices: allowedIndices,
+                isCollapsed: _isSidebarCollapsed,
+                onToggleCollapse: _toggleSidebar,
               ),
               Expanded(
                 child: hasAnyAccess
