@@ -217,10 +217,10 @@ class _StatisticsModalState extends State<StatisticsModal> {
 
     // Nombre d'élèves par tranche de notes
     stats['excellent_students'] = studentAverages
-        .where((s) => s['average'] >= 18)
+        .where((s) => s['average'] >= 19)
         .length;
     stats['tres_bien_students'] = studentAverages
-        .where((s) => s['average'] >= 16 && s['average'] < 18)
+        .where((s) => s['average'] >= 16 && s['average'] < 19)
         .length;
     stats['bien_students'] = studentAverages
         .where((s) => s['average'] >= 14 && s['average'] < 16)
@@ -482,11 +482,11 @@ class _StatisticsModalState extends State<StatisticsModal> {
     // Grade Distribution
     sheetObject.appendRow([TextCellValue('Répartition des notes')]);
     sheetObject.appendRow([
-      TextCellValue('Excellent (>= 18)'),
+      TextCellValue('Excellent (>= 19)'),
       IntCellValue(stats['excellent_students']),
     ]);
     sheetObject.appendRow([
-      TextCellValue('Très Bien (16-18)'),
+      TextCellValue('Très Bien (16-19)'),
       IntCellValue(stats['tres_bien_students']),
     ]);
     sheetObject.appendRow([
@@ -750,8 +750,8 @@ class _StatisticsModalState extends State<StatisticsModal> {
               style: pw.TextStyle(font: timesBold, fontSize: 14, color: accent),
             ),
             pw.SizedBox(height: 6),
-            pw.Text('Excellent (>= 18): ${stats['excellent_students']}'),
-            pw.Text('Très Bien (16-18): ${stats['tres_bien_students']}'),
+            pw.Text('Excellent (>= 19): ${stats['excellent_students']}'),
+            pw.Text('Très Bien (16-19): ${stats['tres_bien_students']}'),
             pw.Text('Bien (14-16): ${stats['bien_students']}'),
             pw.Text('Assez Bien (12-14): ${stats['assez_bien_students']}'),
             pw.Text('Passable (10-12): ${stats['passable_students']}'),
@@ -760,8 +760,8 @@ class _StatisticsModalState extends State<StatisticsModal> {
               headerDecoration: pw.BoxDecoration(color: light),
               headers: ['Tranche', 'Nombre d\'élèves'],
               data: [
-                ['Excellent (>= 18)', stats['excellent_students'].toString()],
-                ['Très Bien (16-18)', stats['tres_bien_students'].toString()],
+                ['Excellent (>= 19)', stats['excellent_students'].toString()],
+                ['Très Bien (16-19)', stats['tres_bien_students'].toString()],
                 ['Bien (14-16)', stats['bien_students'].toString()],
                 ['Assez Bien (12-14)', stats['assez_bien_students'].toString()],
                 ['Passable (10-12)', stats['passable_students'].toString()],
@@ -988,7 +988,7 @@ class _StatisticsModalState extends State<StatisticsModal> {
 
     // Re-calculating counts for the 6-bin format if necessary, or just using the 5 bins.
     // Actually, in StatisticsModal._loadStats, I have:
-    // excellent (>= 16), bien (14-16), assez bien (12-14), passable (10-12), insuffisant (< 10).
+    // excellent (>= 19), bien (15 -16), assez bien (12-14), passable (10-12), insuffisant (< 10).
     // To match GradesPage's labels exactly, I might need to split 'insuffisant'.
     // But since this is a summary from averages, let's keep it consistent with what's already there or slightly adapt.
 
@@ -1008,7 +1008,7 @@ class _StatisticsModalState extends State<StatisticsModal> {
         ),
         const SizedBox(height: 10),
         _buildStatCard(
-          "Excellent (>= 18)",
+          "Excellent (>= 19)",
           stats['excellent_students'].toString(),
           Icons.star,
           color: Colors.amber,

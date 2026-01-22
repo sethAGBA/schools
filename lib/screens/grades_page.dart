@@ -199,8 +199,8 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
   }
 
   String _getAutomaticAppreciation(double average) {
-    if (average >= 18) return 'Excellent';
-    if (average >= 16) return 'Je Bonsoir Bonsoir dien';
+    if (average >= 19) return 'Excellent';
+    if (average >= 16) return 'Très Bien';
     if (average >= 14) return 'Bien';
     if (average >= 12) return 'Assez Bien';
     if (average >= 10) return 'Passable';
@@ -352,18 +352,23 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         : moyenneGenerale;
 
     String autoAppr(double average) {
-      if (average >= 18.0) return 'Excellent travail';
-      if (average >= 16.0) return 'Très bon travail';
-      if (average >= 14.0) return 'Bon travail';
-      if (average >= 12.0) return 'Assez bien';
+      if (average >= 19.0) return 'Excellent';
+      if (average >= 16.0) return 'Très Bien';
+      if (average >= 14.0) return 'Bien';
+      if (average >= 12.0) return 'Assez Bien';
       if (average >= 10.0) return 'Passable';
       return 'Insuffisant';
     }
 
     final List<String> standardGeneral = [
+      'Excellent',
       'Excellent travail',
+      'Très Bien',
+      'Très bien',
       'Très bon travail',
+      'Bien',
       'Bon travail',
+      'Assez Bien',
       'Assez bien',
       'Passable',
       'Insuffisant',
@@ -408,6 +413,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     required List<Course> effectiveSubjects,
     required double moyenneGenerale,
     double? moyenneAnnuelle,
+    int? rang,
+    int? nbEleves,
+    String? mention,
+    double? moyenneGeneraleDeLaClasse,
+    double? moyenneLaPlusForte,
+    double? moyenneLaPlusFaible,
+    int? rangAnnuel,
+    int? nbElevesAnnuel,
     bool updateControllers = true,
   }) async {
     if (_isPeriodLocked()) return;
@@ -478,9 +491,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         );
         final List<String> standardSubject = [
           'Excellent',
+          'Excellent travail',
           'Très Bien',
+          'Très bien',
+          'Très bon travail',
           'Bien',
+          'Bon travail',
           'Assez Bien',
+          'Assez bien',
           'Passable',
           'Insuffisant',
         ];
@@ -536,18 +554,23 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
           : moyenneGenerale;
 
       String autoAppr(double average) {
-        if (average >= 18.0) return 'Excellent travail';
-        if (average >= 16.0) return 'Très bon travail';
-        if (average >= 14.0) return 'Bon travail';
-        if (average >= 12.0) return 'Assez bien';
+        if (average >= 19.0) return 'Excellent';
+        if (average >= 16.0) return 'Très Bien';
+        if (average >= 14.0) return 'Bien';
+        if (average >= 12.0) return 'Assez Bien';
         if (average >= 10.0) return 'Passable';
         return 'Insuffisant';
       }
 
       final List<String> standardGeneral = [
+        'Excellent',
         'Excellent travail',
+        'Très Bien',
+        'Très bien',
         'Très bon travail',
+        'Bien',
         'Bon travail',
+        'Assez Bien',
         'Assez bien',
         'Passable',
         'Insuffisant',
@@ -601,6 +624,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         recommandations: recommendations,
         forces: forces,
         pointsADevelopper: pointsA,
+        moyenneGenerale: moyenneGenerale,
+        moyenneAnnuelle: moyenneAnnuelle,
+        rang: rang,
+        nbEleves: nbEleves,
+        mention: mention,
+        moyenneGeneraleDeLaClasse: moyenneGeneraleDeLaClasse,
+        moyenneLaPlusForte: moyenneLaPlusForte,
+        moyenneLaPlusFaible: moyenneLaPlusFaible,
         conduite: rc?['conduite'],
         attendanceJustifiee: rc?['attendance_justifiee'],
         attendanceInjustifiee: rc?['attendance_injustifiee'],
@@ -658,6 +689,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
     if (confirm != true) return;
 
+    // IMPORTANT: Refresh the global 'grades' list for the whole class
+    // so that _calculateClassAverageForSubject (used in auto-appreciation logic)
+    // uses the most up-to-date values for everyone.
+    await _loadAllGradesForPeriod();
+
     // Progress dialog
     if (!mounted) return;
     showDialog(
@@ -683,6 +719,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         final effSubjects = data['effectiveSubjects'] as List<Course>;
         final moyG = data['moyenneGenerale'] as double;
         final moyA = data['moyenneAnnuelle'] as double?;
+        final rang = data['rang'] as int?;
+        final nbEleves = data['nbEleves'] as int?;
+        final mention = data['mention'] as String?;
+        final classMoy = data['moyenneGeneraleDeLaClasse'] as double?;
+        final forte = data['moyenneLaPlusForte'] as double?;
+        final faible = data['moyenneLaPlusFaible'] as double?;
+        final rangAnn = data['rangAnnuel'] as int?;
+        final nbAnn = data['nbElevesAnnuel'] as int?;
 
         await _applyAutomaticAppreciations(
           student: student,
@@ -690,6 +734,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
           effectiveSubjects: effSubjects,
           moyenneGenerale: moyG,
           moyenneAnnuelle: moyA,
+          rang: rang,
+          nbEleves: nbEleves,
+          mention: mention,
+          moyenneGeneraleDeLaClasse: classMoy,
+          moyenneLaPlusForte: forte,
+          moyenneLaPlusFaible: faible,
+          rangAnnuel: rangAnn,
+          nbElevesAnnuel: nbAnn,
           updateControllers: student.id == selectedStudent,
         );
         count++;
@@ -1745,17 +1797,33 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     // Auto-update appreciations for the current student
     if (student.id == selectedStudent) {
       final data = await _prepareReportCardData(student);
-      final grades = data['grades'] as List<Grade>;
+      final gradesList = data['grades'] as List<Grade>;
       final effSubjects = data['effectiveSubjects'] as List<Course>;
       final moyG = data['moyenneGenerale'] as double;
       final moyA = data['moyenneAnnuelle'] as double?;
+      final rang = data['rang'] as int?;
+      final nbEleves = data['nbEleves'] as int?;
+      final mention = data['mention'] as String?;
+      final classMoy = data['moyenneGeneraleDeLaClasse'] as double?;
+      final forte = data['moyenneLaPlusForte'] as double?;
+      final faible = data['moyenneLaPlusFaible'] as double?;
+      final rangAnn = data['rangAnnuel'] as int?;
+      final nbAnn = data['nbElevesAnnuel'] as int?;
 
       await _applyAutomaticAppreciations(
         student: student,
-        studentGrades: grades,
+        studentGrades: gradesList,
         effectiveSubjects: effSubjects,
         moyenneGenerale: moyG,
         moyenneAnnuelle: moyA,
+        rang: rang,
+        nbEleves: nbEleves,
+        mention: mention,
+        moyenneGeneraleDeLaClasse: classMoy,
+        moyenneLaPlusForte: forte,
+        moyenneLaPlusFaible: faible,
+        rangAnnuel: rangAnn,
+        nbElevesAnnuel: nbAnn,
         updateControllers: true,
       );
     }
@@ -3732,11 +3800,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
                 // Mention
                 String mention;
-                if (moyenneGenerale >= 18) {
+                if (moyenneGenerale >= 19) {
                   mention = 'EXCELLENT';
-                } else if (moyenneGenerale >= 16) {
+                } else if (moyenneGenerale >= 18) {
                   mention = 'TRÈS BIEN';
-                } else if (moyenneGenerale >= 14) {
+                } else if (moyenneGenerale >= 15) {
                   mention = 'BIEN';
                 } else if (moyenneGenerale >= 12) {
                   mention = 'ASSEZ BIEN';
@@ -10164,7 +10232,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
     // Mention
     String mention;
-    if (moyenne >= 18)
+    if (moyenne >= 19)
       mention = 'EXCELLENT';
     else if (moyenne >= 16)
       mention = 'TRÈS BIEN';
@@ -11397,7 +11465,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
     // Mention
     String mention;
-    if (moyenneGenerale >= 18) {
+    if (moyenneGenerale >= 19) {
       mention = 'EXCELLENT';
     } else if (moyenneGenerale >= 16) {
       mention = 'TRÈS BIEN';
