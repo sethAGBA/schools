@@ -1802,7 +1802,23 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     } else {
       await _dbService.updateGrade(newGrade);
     }
-    await _loadAllGradesForPeriod();
+
+    // Recalculer la moyenne de classe pour cette matière immédiatement
+    if (selectedSubject != null) {
+      // On recharge d'abord toutes les notes pour avoir les données fraîches
+      await _loadAllGradesForPeriod();
+      final double? avg = _calculateClassAverageForSubject(selectedSubject!);
+      if (avg != null) {
+        // Mettre à jour le contrôleur pour l'affichage immédiat
+        setState(() {
+          _moyClasseControllers[selectedSubject!]?.text = avg.toStringAsFixed(
+            2,
+          );
+        });
+      }
+    } else {
+      await _loadAllGradesForPeriod();
+    }
 
     // Auto-update appreciations for the current student
     if (student.id == selectedStudent) {
@@ -4884,17 +4900,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                         _calculateClassAverageForSubject(
                                           subject,
                                         );
-                                    if ((_moyClasseControllers[subject]?.text ??
-                                            '')
-                                        .trim()
-                                        .isEmpty) {
-                                      _moyClasseControllers[subject]?.text =
-                                          classSubjectAverage != null
-                                          ? classSubjectAverage.toStringAsFixed(
-                                              2,
-                                            )
-                                          : '-';
-                                    }
+                                    // Toujours forcer la mise à jour avec la valeur fraîche pour garantir la synchro
+                                    _moyClasseControllers[subject]?.text =
+                                        classSubjectAverage != null
+                                        ? classSubjectAverage.toStringAsFixed(2)
+                                        : '-';
                                     final totalCoeff =
                                         [...devoirs, ...compositions]
                                             .where(
