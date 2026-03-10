@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:open_file/open_file.dart';
 
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/statistics_pdf_service.dart';
+import 'package:school_manager/services/statistics_excel_service.dart';
+import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/utils/academic_year.dart';
 
 class StatisticsPage extends StatefulWidget {
@@ -15,6 +22,8 @@ class _StatisticsPageState extends State<StatisticsPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final DatabaseService _db = DatabaseService();
+  final StatisticsPdfService _pdfService = StatisticsPdfService();
+  final StatisticsExcelService _excelService = StatisticsExcelService();
 
   String _selectedYear = '';
   List<String> _availableYears = [];
@@ -210,6 +219,184 @@ class _StatisticsPageState extends State<StatisticsPage>
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // Removed _buildExportButton from here as it's now internal to tabs
+
+  Future<void> _exportTabPdf(int index) async {
+    setState(() => _isLoading = true);
+    try {
+      if (!SafeModeService.instance.isActionAllowed()) {
+        _showModernSnackBar(
+          SafeModeService.instance.getBlockedActionMessage(),
+          isError: true,
+        );
+        return;
+      }
+
+      final directoryPath = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Choisir le dossier de sauvegarde',
+      );
+
+      if (directoryPath == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      Uint8List? pdfBytes;
+      String fileName = '';
+
+      switch (index) {
+        case 0:
+          pdfBytes = await _pdfService.exportAcademicReport(
+            stats: _advancedAcademicStats,
+            year: _selectedYear,
+            className: _selectedClass,
+            term: _selectedTerm,
+          );
+          fileName =
+              'Rapport_Academique_${_selectedYear}_${_selectedClass ?? "Tous"}.pdf';
+          break;
+        case 1:
+          pdfBytes = await _pdfService.exportDisciplineReport(
+            stats: _disciplineStats,
+            year: _selectedYear,
+          );
+          fileName = 'Rapport_Discipline_${_selectedYear}.pdf';
+          break;
+        case 2:
+          pdfBytes = await _pdfService.exportDemographicReport(
+            stats: _demographicStats,
+            year: _selectedYear,
+          );
+          fileName = 'Rapport_Demographique_${_selectedYear}.pdf';
+          break;
+        case 3:
+          pdfBytes = await _pdfService.exportFinanceReport(
+            stats: _financeStats,
+            year: _selectedYear,
+          );
+          fileName = 'Rapport_Financier_${_selectedYear}.pdf';
+          break;
+      }
+
+      if (pdfBytes != null) {
+        final file = File('$directoryPath/$fileName');
+        await file.writeAsBytes(pdfBytes, flush: true);
+        _showModernSnackBar('Rapport enregistré : $fileName');
+        try {
+          await OpenFile.open(file.path);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Erreur export PDF: $e');
+      if (mounted) {
+        _showModernSnackBar('Erreur lors de l\'export PDF: $e', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exportTabExcel(int index) async {
+    setState(() => _isLoading = true);
+    try {
+      if (!SafeModeService.instance.isActionAllowed()) {
+        _showModernSnackBar(
+          SafeModeService.instance.getBlockedActionMessage(),
+          isError: true,
+        );
+        return;
+      }
+
+      final directoryPath = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Choisir le dossier de sauvegarde',
+      );
+
+      if (directoryPath == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      Uint8List? excelBytes;
+      String fileName = '';
+
+      switch (index) {
+        case 0:
+          excelBytes = await _excelService.generateAcademicExcel(
+            stats: _advancedAcademicStats,
+            academicYear: _selectedYear,
+          );
+          fileName =
+              'Stats_Academiques_${_selectedYear}_${_selectedClass ?? "Tous"}.xlsx';
+          break;
+        case 1:
+          excelBytes = await _excelService.generateDisciplineExcel(
+            stats: _disciplineStats,
+            academicYear: _selectedYear,
+          );
+          fileName = 'Stats_Discipline_${_selectedYear}.xlsx';
+          break;
+        case 2:
+          excelBytes = await _excelService.generateDemographicExcel(
+            stats: _demographicStats,
+            academicYear: _selectedYear,
+          );
+          fileName = 'Stats_Demographie_${_selectedYear}.xlsx';
+          break;
+        case 3:
+          excelBytes = await _excelService.generateFinanceExcel(
+            stats: _financeStats,
+            academicYear: _selectedYear,
+          );
+          fileName = 'Stats_Finance_${_selectedYear}.xlsx';
+          break;
+      }
+
+      if (excelBytes != null) {
+        final file = File('$directoryPath/$fileName');
+        await file.writeAsBytes(excelBytes, flush: true);
+        _showModernSnackBar('Rapport Excel enregistré : $fileName');
+        try {
+          await OpenFile.open(file.path);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('Erreur export Excel: $e');
+      if (mounted) {
+        _showModernSnackBar(
+          'Erreur lors de l\'export Excel: $e',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Widget _buildTabExportButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white, size: 20),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          elevation: 0,
+        ),
       ),
     );
   }
@@ -434,6 +621,32 @@ class _StatisticsPageState extends State<StatisticsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter PDF',
+                  icon: Icons.picture_as_pdf,
+                  color: const Color(0xFF6366F1),
+                  onPressed: () => _exportTabPdf(0),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter Excel',
+                  icon: Icons.table_view,
+                  color: Colors.green,
+                  onPressed: () => _exportTabExcel(0),
+                ),
+              ),
+            ],
+          ),
+          _buildSectionHeader(
+            title: 'Vue d\'ensemble',
+            subtitle: 'Aperçu des performances globales',
+            icon: Icons.analytics,
+          ),
           // KPI Row
           Row(
             children: [
@@ -1097,6 +1310,33 @@ class _StatisticsPageState extends State<StatisticsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter PDF',
+                  icon: Icons.picture_as_pdf,
+                  color: Colors.red,
+                  onPressed: () => _exportTabPdf(1),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter Excel',
+                  icon: Icons.table_view,
+                  color: Colors.green,
+                  onPressed: () => _exportTabExcel(1),
+                ),
+              ),
+            ],
+          ),
+          _buildSectionHeader(
+            title: 'Analyse Disciplinaire',
+            subtitle: 'Suivi des absences et sanctions',
+            icon: Icons.gavel_rounded,
+          ),
+          const SizedBox(height: 24),
           const Text(
             'Absences par Mois',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -1214,10 +1454,40 @@ class _StatisticsPageState extends State<StatisticsPage>
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Répartition Garçons / Filles',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter PDF',
+                  icon: Icons.picture_as_pdf,
+                  color: const Color(0xFF14B8A6),
+                  onPressed: () => _exportTabPdf(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter Excel',
+                  icon: Icons.table_view,
+                  color: Colors.green,
+                  onPressed: () => _exportTabExcel(2),
+                ),
+              ),
+            ],
+          ),
+          _buildSectionHeader(
+            title: 'Démographie des élèves',
+            subtitle: 'Répartition par genre et par âge',
+            icon: Icons.wc,
+          ),
+          const SizedBox(height: 24),
+          const Center(
+            child: Text(
+              'Répartition Garçons / Filles',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -1363,6 +1633,33 @@ class _StatisticsPageState extends State<StatisticsPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter PDF',
+                  icon: Icons.picture_as_pdf,
+                  color: const Color(0xFF10B981),
+                  onPressed: () => _exportTabPdf(3),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildTabExportButton(
+                  label: 'Exporter Excel',
+                  icon: Icons.table_view,
+                  color: Colors.green,
+                  onPressed: () => _exportTabExcel(3),
+                ),
+              ),
+            ],
+          ),
+          _buildSectionHeader(
+            title: 'Analyse Financière',
+            subtitle: 'Revenus, dépenses et solde net',
+            icon: Icons.payments_outlined,
+          ),
+          const SizedBox(height: 24),
           Row(
             children: [
               Expanded(
@@ -2147,6 +2444,18 @@ class _StatisticsPageState extends State<StatisticsPage>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showModernSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
