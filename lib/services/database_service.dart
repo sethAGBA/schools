@@ -164,11 +164,72 @@ class DatabaseService {
       if (!columnNames.contains(columnName)) {
         try {
           await db.execute('ALTER TABLE staff ADD COLUMN $columnDef');
-          print('Added column: $columnName');
+          debugPrint('Added column: $columnName');
         } catch (e) {
-          print('Error adding column $columnName: $e');
+          debugPrint('Error adding column $columnName: $e');
         }
       }
+    }
+  }
+
+  Future<void> _cleanupEvaluationTemplatesDuplicates(Database db) async {
+    try {
+      // 1. Keep only the row with the largest ID for each unique combination
+      //    (handles true duplicates with same term value)
+      await db.execute('''
+        DELETE FROM evaluation_templates
+        WHERE id NOT IN (
+          SELECT MAX(id)
+          FROM evaluation_templates
+          GROUP BY className, academicYear, COALESCE(NULLIF(term,''), '__NO_TERM__'), subjectId, type, label
+        )
+      ''');
+
+      // 2. Remove leftover records with term='' that have a newer record
+      //    with the same fields but a non-empty term (legacy data cleanup)
+      await db.execute('''
+        DELETE FROM evaluation_templates
+        WHERE (term IS NULL OR term = '')
+          AND EXISTS (
+            SELECT 1 FROM evaluation_templates AS newer
+            WHERE newer.className   = evaluation_templates.className
+              AND newer.academicYear = evaluation_templates.academicYear
+              AND newer.subjectId   = evaluation_templates.subjectId
+              AND newer.type        = evaluation_templates.type
+              AND newer.label       = evaluation_templates.label
+              AND newer.term IS NOT NULL
+              AND newer.term != ''
+          )
+      ''');
+
+      debugPrint(
+        '[DatabaseService] Nettoyage des doublons EvaluationTemplate terminé.',
+      );
+    } catch (e) {
+      debugPrint(
+        '[DatabaseService] Erreur lors du nettoyage des doublons EvaluationTemplate : $e',
+      );
+    }
+  }
+
+  Future<void> _cleanupGradesDuplicates(Database db) async {
+    try {
+      // Keep only the row with the largest ID for each unique combination of grade fields.
+      // This cleans up accidental duplicates caused by the previous evaluation templates bug.
+      // We coalesce subjectId because legacy data might not have it.
+      await db.execute('''
+        DELETE FROM grades
+        WHERE id NOT IN (
+          SELECT MAX(id)
+          FROM grades
+          GROUP BY studentId, className, academicYear, term, COALESCE(subjectId, subject), type, COALESCE(label, '')
+        )
+      ''');
+      debugPrint('[DatabaseService] Nettoyage des doublons Grades terminé.');
+    } catch (e) {
+      debugPrint(
+        '[DatabaseService] Erreur lors du nettoyage des doublons Grades : $e',
+      );
     }
   }
 
@@ -197,6 +258,11 @@ class DatabaseService {
     final db = await openDatabase(
       path,
       version: 12, // v12: student new columns (placeOfBirth)
+      onOpen: (db) async {
+        await _cleanupGradesDuplicates(db);
+        await _cleanupEvaluationTemplatesDuplicates(db);
+        await _ensureEvaluationTemplatesTable(db);
+      },
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
         // Some platforms (macOS/iOS) may report a benign error here; ignore if unsupported
@@ -866,6 +932,14 @@ class DatabaseService {
         updatedAt TEXT NOT NULL,
         FOREIGN KEY (className, academicYear) REFERENCES classes(name, academicYear) ON UPDATE CASCADE ON DELETE RESTRICT
       )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_eval_templates_lookup ON evaluation_templates(className, academicYear, term, subjectId)',
+    );
+    // Add unique index to prevent duplicates
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_templates_unique 
+      ON evaluation_templates(className, academicYear, term, subjectId, type, label)
     ''');
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_eval_tpl_order ON evaluation_templates(className, academicYear, term, subjectId, type, orderIndex)',
@@ -5973,11 +6047,12 @@ class DatabaseService {
       academicYear: template.academicYear,
     );
     if (template.id == null) {
+      // Use INSERT OR REPLACE to avoid duplicate violations if a similar template exists
       return await db.insert('evaluation_templates', {
         ...template.toMap()..remove('id'),
         'createdAt': now,
         'updatedAt': now,
-      });
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await db.update(
       'evaluation_templates',
@@ -5999,6 +6074,7 @@ class DatabaseService {
     required String term,
     required Course subject,
   }) async {
+    // Check templates for the current term
     final existing = await getEvaluationTemplates(
       className: className,
       academicYear: academicYear,
@@ -6006,6 +6082,31 @@ class DatabaseService {
       subjectId: subject.id,
     );
     if (existing.isNotEmpty) return;
+
+    // Also check for legacy records with term='' that haven't been migrated yet.
+    // If they exist, migrate them to the current term instead of creating new ones.
+    final legacyTemplates = await getEvaluationTemplates(
+      className: className,
+      academicYear: academicYear,
+      term: '', // empty string = legacy records without a term
+      subjectId: subject.id,
+    );
+    if (legacyTemplates.isNotEmpty) {
+      // Migrate legacy records to the current term
+      final db = await database;
+      await db.update(
+        'evaluation_templates',
+        {'term': term},
+        where:
+            'className = ? AND academicYear = ? AND (term IS NULL OR term = \'\') AND subjectId = ?',
+        whereArgs: [className, academicYear, subject.id],
+      );
+      debugPrint(
+        '[DatabaseService] Migrated ${legacyTemplates.length} legacy '
+        'evaluation_templates (term="") → term="$term"',
+      );
+      return;
+    }
 
     double defaultCoeff = 1.0;
     try {

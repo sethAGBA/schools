@@ -4236,27 +4236,24 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
                   final professeurs = <String, String>{
                     for (final s in subjectNames)
-                      s: (_profControllers[s]?.text ?? '-').trim().isNotEmpty
-                          ? _profControllers[s]!.text
-                          : '-',
+                      s: () {
+                        final t = _profControllers[s]?.text ?? '';
+                        return t.trim().isNotEmpty ? t : '-';
+                      }(),
                   };
                   final appreciations = <String, String>{
                     for (final s in subjectNames)
-                      s:
-                          (_appreciationControllers[s]?.text ?? '-')
-                              .trim()
-                              .isNotEmpty
-                          ? _appreciationControllers[s]!.text
-                          : '-',
+                      s: () {
+                        final t = _appreciationControllers[s]?.text ?? '';
+                        return t.trim().isNotEmpty ? t : '-';
+                      }(),
                   };
                   final moyennesClasse = <String, String>{
                     for (final s in subjectNames)
-                      s:
-                          (_moyClasseControllers[s]?.text ?? '-')
-                              .trim()
-                              .isNotEmpty
-                          ? _moyClasseControllers[s]!.text
-                          : '-',
+                      s: () {
+                        final t = _moyClasseControllers[s]?.text ?? '';
+                        return t.trim().isNotEmpty ? t : '-';
+                      }(),
                   };
 
                   await _dbService.archiveSingleReportCard(
@@ -13544,9 +13541,15 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     final Map<String, Map<String, List<EvaluationTemplate>>> tplBySubjectType =
         {};
     for (final t in templatesAll) {
-      tplBySubjectType.putIfAbsent(t.subject, () => {});
-      tplBySubjectType[t.subject]!.putIfAbsent(t.type, () => []);
-      tplBySubjectType[t.subject]![t.type]!.add(t);
+      if (t.subjectId == null || t.subjectId!.isEmpty) continue;
+      final cName = subjects
+          .firstWhere((c) => c.id == t.subjectId, orElse: () => Course.empty())
+          .name;
+      if (cName.isEmpty) continue;
+
+      tplBySubjectType.putIfAbsent(cName, () => {});
+      tplBySubjectType[cName]!.putIfAbsent(t.type, () => []);
+      tplBySubjectType[cName]![t.type]!.add(t);
     }
     for (final m in tplBySubjectType.values) {
       for (final list in m.values) {
@@ -13769,6 +13772,60 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       // Coefficient supprimé de l'édition ici
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                        tooltip: 'Supprimer cette note',
+                                        onPressed: () async {
+                                          if (_isPeriodLocked() ||
+                                              !SafeModeService.instance
+                                                  .isActionAllowed())
+                                            return;
+                                          final bool confirm =
+                                              await showDialog<bool>(
+                                                context: context,
+                                                builder: (ctx) => AlertDialog(
+                                                  title: const Text(
+                                                    'Confirmation',
+                                                  ),
+                                                  content: const Text(
+                                                    'Voulez-vous vraiment supprimer cette note ?',
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.of(
+                                                            ctx,
+                                                          ).pop(false),
+                                                      child: const Text('Non'),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed: () =>
+                                                          Navigator.of(
+                                                            ctx,
+                                                          ).pop(true),
+                                                      child: const Text('Oui'),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ) ??
+                                              false;
+                                          if (confirm) {
+                                            final gId = gradesList[i].id;
+                                            if (gId != null) {
+                                              await _dbService.deleteGrade(gId);
+                                            }
+                                            await _loadAllGradesForPeriod();
+                                            Navigator.of(context).pop();
+                                            _showEditStudentGradesDialog(
+                                              student,
+                                            );
+                                          }
+                                        },
+                                      ),
                                     ],
                                   ),
                                 );
