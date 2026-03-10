@@ -1409,6 +1409,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     final templates = await _dbService.getEvaluationTemplates(
       className: cls,
       academicYear: year,
+      term: selectedTerm,
       subjectId: course.id,
     );
     final devoir = templates
@@ -10378,6 +10379,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         .getEvaluationTemplates(
           className: cls,
           academicYear: year,
+          term: selectedTerm,
           subjectId: course.id,
         );
     double defaultCoeff = 1.0;
@@ -10394,6 +10396,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       final t = await _dbService.getEvaluationTemplates(
         className: cls,
         academicYear: year,
+        term: selectedTerm,
         subjectId: course.id,
       );
       setDialogState(() => templates = t);
@@ -10536,6 +10539,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                             await _dbService.ensureDefaultEvaluationTemplates(
                               className: cls,
                               academicYear: year,
+                              term: selectedTerm ?? 'Trimestre 1',
                               subject: course,
                             );
                             await reload(setDialogState);
@@ -10740,6 +10744,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                     id: existing?.id,
                     className: className,
                     academicYear: academicYear,
+                    term: existing?.term ?? selectedTerm ?? 'Trimestre 1',
                     subjectId: subject.id,
                     subject: subject.name,
                     type: selectedType,
@@ -10827,6 +10832,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       await _dbService.ensureDefaultEvaluationTemplates(
         className: selectedClass!,
         academicYear: effectiveYear,
+        term: selectedTerm!,
         subject: course,
       );
       await _loadEvaluationTemplatesForCurrentSelection();
@@ -13533,6 +13539,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     final templatesAll = await _dbService.getEvaluationTemplates(
       className: selectedClass!,
       academicYear: effYear,
+      term: selectedTerm,
     );
     final Map<String, Map<String, List<EvaluationTemplate>>> tplBySubjectType =
         {};

@@ -681,6 +681,7 @@ class DatabaseService {
     await _ensurePaymentScheduleRulesTable(db);
     await _ensureGradesPeriodWorkflowTable(db);
     await _ensureEvaluationTemplatesTable(db);
+    await _ensureEvaluationTemplatesTermColumn(db);
     await _ensurePermissionGroupsTable(db);
     await _ensureUserSessionsTable(db);
     debugPrint(
@@ -853,6 +854,7 @@ class DatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         className TEXT NOT NULL,
         academicYear TEXT NOT NULL,
+        term TEXT NOT NULL,
         subjectId TEXT NOT NULL,
         subject TEXT NOT NULL,
         type TEXT NOT NULL,
@@ -866,11 +868,24 @@ class DatabaseService {
       )
     ''');
     await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_eval_tpl_lookup ON evaluation_templates(className, academicYear, subjectId, type)',
+      'CREATE INDEX IF NOT EXISTS idx_eval_tpl_order ON evaluation_templates(className, academicYear, term, subjectId, type, orderIndex)',
     );
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_eval_tpl_order ON evaluation_templates(className, academicYear, subjectId, type, orderIndex)',
-    );
+  }
+
+  Future<void> _ensureEvaluationTemplatesTermColumn(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(evaluation_templates)');
+    final hasTerm = cols.any((c) => c['name'] == 'term');
+    if (!hasTerm) {
+      try {
+        await db.execute(
+          "ALTER TABLE evaluation_templates ADD COLUMN term TEXT NOT NULL DEFAULT ''",
+        );
+      } catch (e) {
+        debugPrint(
+          '[DatabaseService] Error adding term to evaluation_templates: $e',
+        );
+      }
+    }
   }
 
   Future<void> _ensureGradesPeriodWorkflowTable(Database db) async {
@@ -5926,11 +5941,16 @@ class DatabaseService {
   Future<List<EvaluationTemplate>> getEvaluationTemplates({
     required String className,
     required String academicYear,
+    String? term,
     String? subjectId,
   }) async {
     final db = await database;
     final whereParts = <String>['className = ?', 'academicYear = ?'];
     final args = <Object?>[className, academicYear];
+    if (term != null && term.trim().isNotEmpty) {
+      whereParts.add('term = ?');
+      args.add(term.trim());
+    }
     if (subjectId != null && subjectId.trim().isNotEmpty) {
       whereParts.add('subjectId = ?');
       args.add(subjectId.trim());
@@ -5976,11 +5996,13 @@ class DatabaseService {
   Future<void> ensureDefaultEvaluationTemplates({
     required String className,
     required String academicYear,
+    required String term,
     required Course subject,
   }) async {
     final existing = await getEvaluationTemplates(
       className: className,
       academicYear: academicYear,
+      term: term,
       subjectId: subject.id,
     );
     if (existing.isNotEmpty) return;
@@ -5998,6 +6020,7 @@ class DatabaseService {
       EvaluationTemplate(
         className: className,
         academicYear: academicYear,
+        term: term,
         subjectId: subject.id,
         subject: subject.name,
         type: 'Devoir',
@@ -6011,6 +6034,7 @@ class DatabaseService {
       EvaluationTemplate(
         className: className,
         academicYear: academicYear,
+        term: term,
         subjectId: subject.id,
         subject: subject.name,
         type: 'Composition',

@@ -2,6 +2,7 @@ class EvaluationTemplate {
   final int? id;
   final String className;
   final String academicYear;
+  final String term; // Trimestre 1, Semestre 2, etc.
   final String subjectId;
   final String subject;
   final String type; // Devoir / Composition / ...
@@ -14,6 +15,7 @@ class EvaluationTemplate {
     this.id,
     required this.className,
     required this.academicYear,
+    required this.term,
     required this.subjectId,
     required this.subject,
     required this.type,
@@ -27,6 +29,7 @@ class EvaluationTemplate {
     'id': id,
     'className': className,
     'academicYear': academicYear,
+    'term': term,
     'subjectId': subjectId,
     'subject': subject,
     'type': type,
@@ -54,6 +57,7 @@ class EvaluationTemplate {
       id: map['id'] as int?,
       className: (map['className'] ?? '').toString(),
       academicYear: (map['academicYear'] ?? '').toString(),
+      term: (map['term'] ?? '').toString(),
       subjectId: (map['subjectId'] ?? '').toString(),
       subject: (map['subject'] ?? '').toString(),
       type: (map['type'] ?? 'Devoir').toString(),
