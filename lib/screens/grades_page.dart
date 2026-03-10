@@ -146,6 +146,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
   String? _lastLoadedTerm;
   String? _lastLoadedClass;
   String? _lastLoadedYear;
+  List<EvaluationTemplate> _allTemplatesForPeriod = [];
 
   bool get _isTeacherRestricted => _currentTeacherStaff != null;
 
@@ -180,7 +181,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
   }
 
   String _normalizeSubjectKey(String subject) {
-    return subject.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    String s = subject.trim().toLowerCase();
+    s = s.replaceAll(RegExp(r'[éèêë]'), 'e');
+    s = s.replaceAll(RegExp(r'[àâä]'), 'a');
+    s = s.replaceAll(RegExp(r'[îï]'), 'i');
+    s = s.replaceAll(RegExp(r'[ôö]'), 'o');
+    s = s.replaceAll(RegExp(r'[ûü]'), 'u');
+    s = s.replaceAll(RegExp(r'[ç]'), 'c');
+    return s.replaceAll(RegExp(r'\s+'), ' ');
   }
 
   bool _isBlankValue(String? value) {
@@ -652,6 +660,100 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         leDate: rc?['le_date'],
       );
     }
+  }
+
+  Future<void> _recalculateAndSyncAllClassResults() async {
+    if (selectedClass == null || selectedTerm == null) return;
+    if (_isPeriodLocked()) return;
+    if (!SafeModeService.instance.isActionAllowed()) return;
+
+    final academicYear = selectedAcademicYear ?? academicYearNotifier.value;
+    final students = await _dbService.getStudentsByClassAndClassYear(
+      selectedClass!,
+      academicYear,
+    );
+
+    if (students.isEmpty) return;
+
+    // Progress Dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Recalculation des moyennes et rangs...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // 1. Charger TOUTES les notes de la classe pour gagner du temps
+      await _loadAllGradesForPeriod();
+
+      // 2. Pour chaque élève, calculer l'intégralité des données (Averages, Ranks, Metrics)
+      // On utilise _prepareReportCardData qui est déjà très complet
+      List<Map<String, dynamic>> results = [];
+      for (final student in students) {
+        final data = await _prepareReportCardData(student);
+        results.add(data);
+      }
+
+      // 3. Sauvegarder massivement en base
+      for (final res in results) {
+        final Student s = res['student'];
+        await _dbService.insertOrUpdateReportCard(
+          studentId: s.id,
+          className: selectedClass!,
+          academicYear: academicYear,
+          term: selectedTerm!,
+          moyenneGenerale: res['moyenneGenerale'] as double?,
+          rang: res['rang'] as int?,
+          nbEleves: res['nbEleves'] as int?,
+          mention: res['mention'] as String?,
+          moyenneGeneraleDeLaClasse:
+              res['moyenneGeneraleDeLaClasse'] as double?,
+          moyenneLaPlusForte: res['moyenneLaPlusForte'] as double?,
+          moyenneLaPlusFaible: res['moyenneLaPlusFaible'] as double?,
+          moyenneAnnuelle: res['moyenneAnnuelle'] as double?,
+        );
+      }
+    } catch (e) {
+      debugPrint('[Recalculate] Error: $e');
+    } finally {
+      if (mounted) {
+        Navigator.pop(context); // Close progress
+        setState(() {});
+        showSnackBar(context, 'Recalcul des résultats terminé pour la classe.');
+      }
+    }
+  }
+
+  Future<void> _recalculateAndSyncStudentResults(Student student) async {
+    final academicYear = selectedAcademicYear ?? academicYearNotifier.value;
+    final term = selectedTerm ?? '';
+    if (term.isEmpty) return;
+
+    final data = await _prepareReportCardData(student);
+    await _dbService.insertOrUpdateReportCard(
+      studentId: student.id,
+      className: selectedClass!,
+      academicYear: academicYear,
+      term: term,
+      moyenneGenerale: data['moyenneGenerale'] as double?,
+      rang: data['rang'] as int?,
+      nbEleves: data['nbEleves'] as int?,
+      mention: data['mention'] as String?,
+      moyenneGeneraleDeLaClasse: data['moyenneGeneraleDeLaClasse'] as double?,
+      moyenneLaPlusForte: data['moyenneLaPlusForte'] as double?,
+      moyenneLaPlusFaible: data['moyenneLaPlusFaible'] as double?,
+      moyenneAnnuelle: data['moyenneAnnuelle'] as double?,
+    );
   }
 
   Future<void> _applyBulkAutomaticAppreciations() async {
@@ -1191,6 +1293,41 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     return l.isNotEmpty ? l : type;
   }
 
+  List<Grade> _getFilteredGradesForSubjectAndType({
+    required Iterable<Grade> gradesToFilter,
+    required String subjectName,
+    required String type,
+    required Iterable<EvaluationTemplate> templates,
+  }) {
+    final targetSubjectKey = _normalizeSubjectKey(subjectName);
+
+    // 1. Trouver les templates pour cette matière et ce type
+    final relevantTemplates = templates
+        .where(
+          (t) =>
+              _normalizeSubjectKey(t.subject) == targetSubjectKey &&
+              t.type == type,
+        )
+        .toList();
+
+    // 2. Filtrer les notes de base (match sujet et type)
+    final baseGrades = gradesToFilter.where(
+      (g) =>
+          _normalizeSubjectKey(g.subject) == targetSubjectKey && g.type == type,
+    );
+
+    // 3. Si aucun template n'est défini pour cette matière/type, on accepte tout (legacy/manuel)
+    if (relevantTemplates.isEmpty) {
+      return baseGrades.toList();
+    }
+
+    // 4. Si des templates existent, on ne garde que celles dont le label matche un template
+    final allowedLabels = relevantTemplates.map((t) => t.label.trim()).toSet();
+    return baseGrades
+        .where((g) => allowedLabels.contains((g.label ?? '').trim()))
+        .toList();
+  }
+
   Future<void> _applyAssignmentProfessors({
     required String className,
     required String academicYear,
@@ -1720,12 +1857,20 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
           academicYear: targetYear,
           term: selectedTerm!,
         );
+        _allTemplatesForPeriod = await _dbService.getEvaluationTemplates(
+          className: selectedClass!,
+          academicYear: targetYear,
+          term: selectedTerm!,
+        );
       } else {
         grades = [];
+        _allTemplatesForPeriod = [];
       }
     } else {
       grades = [];
+      _allTemplatesForPeriod = [];
     }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -2479,6 +2624,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
             icon: const Icon(Icons.send),
             label: const Text('Soumettre'),
           ),
+          const SizedBox(width: 8),
+          if (!locked && SafeModeService.instance.isActionAllowed())
+            ElevatedButton.icon(
+              onPressed: _recalculateAndSyncAllClassResults,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Recalculer & Actualiser Tout'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
+            ),
           const SizedBox(width: 8),
           if (!locked &&
               status.toLowerCase() == 'brouillon' &&
@@ -8088,23 +8244,43 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
   double? _calculateClassAverageForSubject(String subject) {
     final targetKey = _normalizeSubjectKey(subject);
-    final gradesForSubject = grades
+    final baseGrades = grades
         .where(
           (g) =>
               g.className == selectedClass &&
               g.academicYear ==
                   (selectedAcademicYear ?? academicYearNotifier.value) &&
               _normalizeSubjectKey(g.subject) == targetKey &&
-              g.term == selectedTerm &&
-              (g.type == 'Devoir' || g.type == 'Composition'),
+              g.term == selectedTerm,
         )
         .toList();
 
-    if (gradesForSubject.isEmpty) return null;
+    if (baseGrades.isEmpty) return null;
+
+    // Filtrer par template pour chaque type
+    final List<Grade> filtered = [];
+    filtered.addAll(
+      _getFilteredGradesForSubjectAndType(
+        gradesToFilter: baseGrades,
+        subjectName: subject,
+        type: 'Devoir',
+        templates: _allTemplatesForPeriod,
+      ),
+    );
+    filtered.addAll(
+      _getFilteredGradesForSubjectAndType(
+        gradesToFilter: baseGrades,
+        subjectName: subject,
+        type: 'Composition',
+        templates: _allTemplatesForPeriod,
+      ),
+    );
+
+    if (filtered.isEmpty) return null;
 
     double total = 0.0;
     double totalCoeff = 0.0;
-    for (final g in gradesForSubject) {
+    for (final g in filtered) {
       if (g.maxValue > 0 && g.coefficient > 0) {
         total += ((g.value / g.maxValue) * 20) * g.coefficient;
         totalCoeff += g.coefficient;
@@ -11301,20 +11477,44 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         academicYear: effectiveYear,
         term: term,
       );
+
+      // Charger les templates pour cette période précise afin de filtrer proprement
+      final termTemplates = await _dbService.getEvaluationTemplates(
+        className: selectedClass!,
+        academicYear: effectiveYear,
+        term: term,
+      );
+
       // Calcul pondéré par matière pour l'élève
       double sumPts = 0.0;
       double sumW = 0.0;
       for (final course in effectiveSubjects) {
-        final sg = periodGrades
-            .where(
-              (g) =>
-                  g.studentId == student.id &&
-                  (g.subjectId.trim().isNotEmpty
-                      ? g.subjectId == course.id
-                      : g.subject == course.name) &&
-                  (g.type == 'Devoir' || g.type == 'Composition'),
-            )
-            .toList();
+        final baseSubjectGrades = periodGrades.where(
+          (g) =>
+              g.studentId == student.id &&
+              (g.subjectId.trim().isNotEmpty
+                  ? g.subjectId == course.id
+                  : g.subject == course.name),
+        );
+
+        final List<Grade> sg = [];
+        sg.addAll(
+          _getFilteredGradesForSubjectAndType(
+            gradesToFilter: baseSubjectGrades,
+            subjectName: course.name,
+            type: 'Devoir',
+            templates: termTemplates,
+          ),
+        );
+        sg.addAll(
+          _getFilteredGradesForSubjectAndType(
+            gradesToFilter: baseSubjectGrades,
+            subjectName: course.name,
+            type: 'Composition',
+            templates: termTemplates,
+          ),
+        );
+
         if (sg.isEmpty) continue;
         double n = 0.0;
         double c = 0.0;
@@ -11338,36 +11538,92 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       // Agrégation annuelle pondérée
       totalAnnualPoints += sumPts;
       totalAnnualWeights += sumW;
+
       // Agréger pour la classe (par élève) pour l'annuel - UNIQUEMENT pour les élèves de la classe
+      // On regroupe les notes par élève pour appliquer le filtre de template
+      final Map<String, List<Grade>> gradesByStudent = {};
       for (final g in periodGrades.where(
-        (g) =>
-            classStudentIdsSet.contains(g.studentId) &&
-            (g.type == 'Devoir' || g.type == 'Composition'),
+        (g) => classStudentIdsSet.contains(g.studentId),
       )) {
-        if (g.maxValue > 0 && g.coefficient > 0) {
-          nAnnualByStudent[g.studentId] =
-              (nAnnualByStudent[g.studentId] ?? 0) +
-              ((g.value / g.maxValue) * 20) * g.coefficient;
-          cAnnualByStudent[g.studentId] =
-              (cAnnualByStudent[g.studentId] ?? 0) + g.coefficient;
-        }
+        gradesByStudent.putIfAbsent(g.studentId, () => []).add(g);
       }
+
+      gradesByStudent.forEach((studentId, sGrades) {
+        // Pour chaque élève, on filtre par matière et template
+        for (final course in effectiveSubjects) {
+          final baseSubj = sGrades.where(
+            (g) => (g.subjectId.trim().isNotEmpty
+                ? g.subjectId == course.id
+                : g.subject == course.name),
+          );
+          final filtered = <Grade>[];
+          filtered.addAll(
+            _getFilteredGradesForSubjectAndType(
+              gradesToFilter: baseSubj,
+              subjectName: course.name,
+              type: 'Devoir',
+              templates: termTemplates,
+            ),
+          );
+          filtered.addAll(
+            _getFilteredGradesForSubjectAndType(
+              gradesToFilter: baseSubj,
+              subjectName: course.name,
+              type: 'Composition',
+              templates: termTemplates,
+            ),
+          );
+
+          for (final g in filtered) {
+            if (g.maxValue > 0 && g.coefficient > 0) {
+              nAnnualByStudent[studentId] =
+                  (nAnnualByStudent[studentId] ?? 0) +
+                  ((g.value / g.maxValue) * 20) * g.coefficient;
+              cAnnualByStudent[studentId] =
+                  (cAnnualByStudent[studentId] ?? 0) + g.coefficient;
+            }
+          }
+        }
+      });
     }
 
     // Calcul de la moyenne générale pondérée par coefficients de matières (période sélectionnée)
     double sumPtsSel = 0.0;
     double sumWSel = 0.0;
     final Map<String, double?> subjectAverages = {};
+
+    // Charger tous les templates pour la période sélectionnée afin de filtrer proprement
+    final selectedTemplates = await _dbService.getEvaluationTemplates(
+      className: selectedClass!,
+      academicYear: effectiveYear,
+      term: selectedTerm!,
+    );
+
     for (final course in effectiveSubjects) {
-      final sg = studentGrades
-          .where(
-            (g) =>
-                (g.subjectId.trim().isNotEmpty
-                    ? g.subjectId == course.id
-                    : g.subject == course.name) &&
-                (g.type == 'Devoir' || g.type == 'Composition'),
-          )
-          .toList();
+      final baseSubjectGrades = studentGrades.where(
+        (g) => (g.subjectId.trim().isNotEmpty
+            ? g.subjectId == course.id
+            : g.subject == course.name),
+      );
+
+      final List<Grade> sg = [];
+      sg.addAll(
+        _getFilteredGradesForSubjectAndType(
+          gradesToFilter: baseSubjectGrades,
+          subjectName: course.name,
+          type: 'Devoir',
+          templates: selectedTemplates,
+        ),
+      );
+      sg.addAll(
+        _getFilteredGradesForSubjectAndType(
+          gradesToFilter: baseSubjectGrades,
+          subjectName: course.name,
+          type: 'Composition',
+          templates: selectedTemplates,
+        ),
+      );
+
       if (sg.isEmpty) {
         subjectAverages[course.name] = null;
         continue;
@@ -13541,7 +13797,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     final Map<String, Map<String, List<EvaluationTemplate>>> tplBySubjectType =
         {};
     for (final t in templatesAll) {
-      if (t.subjectId == null || t.subjectId!.isEmpty) continue;
+      if (t.subjectId.isEmpty) continue;
       final cName = subjects
           .firstWhere((c) => c.id == t.subjectId, orElse: () => Course.empty())
           .name;
@@ -13715,6 +13971,18 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                               const Divider(),
                               ...List.generate(gradesList.length, (i) {
                                 final key = '$subject-$type-$i';
+                                final currentTpls =
+                                    (tplBySubjectType[subject] ??
+                                        const {})[type] ??
+                                    const [];
+                                final isOrphan =
+                                    currentTpls.isNotEmpty &&
+                                    !currentTpls.any(
+                                      (t) =>
+                                          t.label.trim() ==
+                                          (gradesList[i].label ?? '').trim(),
+                                    );
+
                                 return Padding(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 8.0,
@@ -13729,9 +13997,20 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                               SafeModeService.instance
                                                   .isActionAllowed() &&
                                               !_isPeriodLocked(),
-                                          decoration: const InputDecoration(
+                                          decoration: InputDecoration(
                                             labelText: 'Nom de la note',
-                                            border: OutlineInputBorder(),
+                                            border: const OutlineInputBorder(),
+                                            suffixIcon: isOrphan
+                                                ? const Tooltip(
+                                                    message:
+                                                        'Attention : Cette note ne correspond à aucun modèle d\'évaluation. Veuillez la supprimer pour éviter toute erreur de calcul.',
+                                                    child: Icon(
+                                                      Icons.warning_amber,
+                                                      color: Colors.orange,
+                                                      size: 20,
+                                                    ),
+                                                  )
+                                                : null,
                                           ),
                                         ),
                                       ),
@@ -13819,6 +14098,9 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                               await _dbService.deleteGrade(gId);
                                             }
                                             await _loadAllGradesForPeriod();
+                                            await _recalculateAndSyncStudentResults(
+                                              student,
+                                            );
                                             Navigator.of(context).pop();
                                             _showEditStudentGradesDialog(
                                               student,
@@ -13897,6 +14179,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                           }
                         }
                       }
+                      await _recalculateAndSyncStudentResults(student);
                       await _loadAllGradesForPeriod();
                       Navigator.of(context).pop();
                       showRootSnackBar(
