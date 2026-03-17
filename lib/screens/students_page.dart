@@ -2082,10 +2082,9 @@ class _StudentsPageState extends State<StudentsPage> {
                   final classObjFull =
                       _classFromKey(classKey, classes) ??
                       Class(
-                        name: className,
-                        academicYear: classYear,
-                        titulaire: null,
-                        fraisEcole: null,
+                        name: 'Nouvelle Classe',
+                        academicYear: year,
+                        ecolage: null,
                         fraisCotisationParallele: null,
                       );
                   final classStudents = await DatabaseService()
@@ -2733,7 +2732,7 @@ class _StudentsPageState extends State<StudentsPage> {
                         name: student.className,
                         academicYear: student.academicYear,
                         titulaire: null,
-                        fraisEcole: null,
+                        ecolage: null,
                         fraisCotisationParallele: null,
                       ),
                     );
@@ -2807,7 +2806,7 @@ class __ClassDialogState extends State<_ClassDialog> {
   final classNameController = TextEditingController();
   final academicYearController = TextEditingController();
   final titulaireController = TextEditingController();
-  final fraisEcoleController = TextEditingController();
+  final ecolageController = TextEditingController();
   final fraisCotisationParalleleController = TextEditingController();
   final List<String> _levels = const [
     'Primaire',
@@ -2829,7 +2828,7 @@ class __ClassDialogState extends State<_ClassDialog> {
     classNameController.dispose();
     academicYearController.dispose();
     titulaireController.dispose();
-    fraisEcoleController.dispose();
+    ecolageController.dispose();
     fraisCotisationParalleleController.dispose();
     super.dispose();
   }
@@ -2882,7 +2881,7 @@ class __ClassDialogState extends State<_ClassDialog> {
             ),
             const SizedBox(height: AppSizes.smallSpacing),
             CustomFormField(
-              controller: fraisEcoleController,
+              controller: ecolageController,
               labelText: 'Frais d\'école',
               hintText: 'Montant des frais d\'école',
               validator: (value) {
@@ -2922,8 +2921,8 @@ class __ClassDialogState extends State<_ClassDialog> {
               titulaire: titulaireController.text.isNotEmpty
                   ? titulaireController.text
                   : null,
-              fraisEcole: fraisEcoleController.text.isNotEmpty
-                  ? double.tryParse(fraisEcoleController.text)
+              ecolage: ecolageController.text.isNotEmpty
+                  ? double.tryParse(ecolageController.text)
                   : null,
               fraisCotisationParallele:
                   fraisCotisationParalleleController.text.isNotEmpty
@@ -2956,8 +2955,8 @@ class __ClassDialogState extends State<_ClassDialog> {
                   titulaire: titulaireController.text.isNotEmpty
                       ? titulaireController.text
                       : null,
-                  fraisEcole: fraisEcoleController.text.isNotEmpty
-                      ? double.tryParse(fraisEcoleController.text)
+                  ecolage: ecolageController.text.isNotEmpty
+                      ? double.tryParse(ecolageController.text)
                       : null,
                   fraisCotisationParallele:
                       fraisCotisationParalleleController.text.isNotEmpty

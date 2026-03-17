@@ -28,6 +28,7 @@ class SchoolInfo {
   final String? civilityLycee;
   final String? civilityUniversity;
   final String? slogan;
+  final double? registrationFees;
 
   SchoolInfo({
     required this.name,
@@ -55,6 +56,7 @@ class SchoolInfo {
     this.civilityCollege,
     this.civilityLycee,
     this.civilityUniversity,
+    this.registrationFees,
   });
 
   factory SchoolInfo.fromMap(Map<String, dynamic> map) {
@@ -84,6 +86,7 @@ class SchoolInfo {
       civilityLycee: map['civilityLycee'],
       civilityUniversity: map['civilityUniversity'],
       slogan: map['slogan'],
+      registrationFees: map['registrationFees'] != null ? (map['registrationFees'] as num).toDouble() : null,
     );
   }
 
@@ -114,6 +117,7 @@ class SchoolInfo {
       'civilityLycee': civilityLycee,
       'civilityUniversity': civilityUniversity,
       'slogan': slogan,
+      'registrationFees': registrationFees,
     };
   }
 }
@@ -150,6 +154,7 @@ Future<SchoolInfo> loadSchoolInfo() async {
       educationDirection: prefs.getString('school_education_direction'),
       inspection: prefs.getString('school_inspection'),
       slogan: prefs.getString('school_slogan'),
+      registrationFees: prefs.getDouble('school_registration_fees'),
     );
     // Save to DB for future use
     await dbService.insertSchoolInfo(schoolInfo);
@@ -188,6 +193,7 @@ Future<SchoolInfo> loadSchoolInfo() async {
         educationDirection: schoolInfo.educationDirection,
         inspection: schoolInfo.inspection,
         slogan: schoolInfo.slogan,
+        registrationFees: schoolInfo.registrationFees,
       );
       await dbService.insertSchoolInfo(merged);
       schoolInfo = merged;

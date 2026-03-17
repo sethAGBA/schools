@@ -376,7 +376,9 @@ class _DashboardHomeState extends State<DashboardHome>
       final Map<String, double> expectedByClass = {};
       for (final c in classes) {
         final unitFee =
-            (c.fraisEcole ?? 0.0) + (c.fraisCotisationParallele ?? 0.0);
+            (c.ecolage ?? 0.0) + (c.fraisCotisationParallele ?? 0.0);
+        // Note: For simplicity on dashboard summary, we could add enrollment fees if we had the count here,
+        // but often dashboard shows global overview. Let's try to be precise if students are available.
         final cnt = studentCountByClass[c.name] ?? 0;
         final exp = unitFee * cnt;
         expectedByClass[c.name] = exp;
@@ -412,7 +414,7 @@ class _DashboardHomeState extends State<DashboardHome>
       final Map<String, double> unitFeeByClass = {};
       for (final c in classes) {
         unitFeeByClass[c.name] =
-            (c.fraisEcole ?? 0.0) + (c.fraisCotisationParallele ?? 0.0);
+            (c.ecolage ?? 0.0) + (c.fraisCotisationParallele ?? 0.0);
       }
       final Map<String, double> paidByStudent = {};
       for (final p in payments.where(

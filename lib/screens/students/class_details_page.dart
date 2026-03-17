@@ -2269,7 +2269,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                     Padding(
                       padding: const EdgeInsets.only(bottom: 24),
                       child: CustomFormField(
-                        controller: _fraisEcoleController,
+                        controller: _ecolageController,
                         labelText: "Frais d'école",
                         hintText: "Montant des frais d'école",
                         validator: (value) {
@@ -2377,7 +2377,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       future: _dbService.getTotalPaidForStudent(student.id),
       builder: (context, snapshot) {
         final double fraisEcole =
-            double.tryParse(_fraisEcoleController.text) ?? 0;
+            double.tryParse(_ecolageController.text) ?? 0;
         final double fraisCotisation =
             double.tryParse(_fraisCotisationParalleleController.text) ?? 0;
         final double montantMax = fraisEcole + fraisCotisation;
@@ -2630,7 +2630,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   }
 
   Future<List<Student>> _getFilteredAndSortedStudentsAsync() async {
-    final double fraisEcole = double.tryParse(_fraisEcoleController.text) ?? 0;
+    final double fraisEcole = double.tryParse(_ecolageController.text) ?? 0;
     final double fraisCotisation =
         double.tryParse(_fraisCotisationParalleleController.text) ?? 0;
     final double montantMax = fraisEcole + fraisCotisation;
@@ -2704,7 +2704,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   }
 
   void _showStudentDetailsDialog(Student student) async {
-    final double fraisEcole = double.tryParse(_fraisEcoleController.text) ?? 0;
+    final double fraisEcole = double.tryParse(_ecolageController.text) ?? 0;
     final double fraisCotisation =
         double.tryParse(_fraisCotisationParalleleController.text) ?? 0;
     final double montantMax = fraisEcole + fraisCotisation;
@@ -2995,7 +2995,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   }
 
   void _showPaymentDialog(Student student) async {
-    final double fraisEcole = double.tryParse(_fraisEcoleController.text) ?? 0;
+    final double fraisEcole = double.tryParse(_ecolageController.text) ?? 0;
     final double fraisCotisation =
         double.tryParse(_fraisCotisationParalleleController.text) ?? 0;
     final double montantMax = fraisEcole + fraisCotisation;
@@ -3489,8 +3489,8 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                                       level: _selectedLevel,
                                       titulaire: _titulaireController.text
                                           .trim(),
-                                      fraisEcole: double.tryParse(
-                                        _fraisEcoleController.text,
+                                      ecolage: double.tryParse(
+                                        _ecolageController.text,
                                       ),
                                       fraisCotisationParallele: double.tryParse(
                                         _fraisCotisationParalleleController
@@ -3581,7 +3581,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                         hintText: 'Nom du titulaire de la classe',
                       ),
                       CustomFormField(
-                        controller: _fraisEcoleController,
+                        controller: _ecolageController,
                         labelText: "Frais d'école",
                         hintText: "Montant des frais d'école",
                         validator: (value) {
@@ -4941,8 +4941,8 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                         titulaire: _titulaireController.text.isNotEmpty
                             ? _titulaireController.text
                             : null,
-                        fraisEcole: _fraisEcoleController.text.isNotEmpty
-                            ? double.tryParse(_fraisEcoleController.text)
+                        ecolage: _ecolageController.text.isNotEmpty
+                            ? double.tryParse(_ecolageController.text)
                             : null,
                         fraisCotisationParallele:
                             _fraisCotisationParalleleController.text.isNotEmpty
@@ -6047,7 +6047,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   Future<List<double>> _getStatsForStudents() async {
     int nbPayes = 0;
     int nbAttente = 0;
-    final double fraisEcole = double.tryParse(_fraisEcoleController.text) ?? 0;
+    final double fraisEcole = double.tryParse(_ecolageController.text) ?? 0;
     final double fraisCotisation =
         double.tryParse(_fraisCotisationParalleleController.text) ?? 0;
     final double montantMax = fraisEcole + fraisCotisation;

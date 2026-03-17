@@ -9,16 +9,18 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:school_manager/screens/dashboard_home.dart';
 import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
+
 import 'package:school_manager/services/database_service.dart';
 import 'package:school_manager/services/license_service.dart';
 import 'package:school_manager/services/pdf_service.dart';
-import 'package:school_manager/services/auth_service.dart';
+
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/models/class.dart';
 import 'package:school_manager/models/payment.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:school_manager/models/user.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -57,6 +59,7 @@ class _SettingsPageState extends State<SettingsPage>
   final _inspectionController = TextEditingController();
   final _reportFooterController = TextEditingController();
   final _sloganController = TextEditingController();
+  final _registrationFeesController = TextEditingController();
 
   // Focus nodes pour l'accessibilité
   late FocusNode _etablissementFocusNode;
@@ -80,6 +83,7 @@ class _SettingsPageState extends State<SettingsPage>
   late FocusNode _inspectionFocusNode;
   late FocusNode _reportFooterFocusNode;
   late FocusNode _sloganFocusNode;
+  late FocusNode _registrationFeesFocusNode;
 
   String? _logoPath;
   String? _flagPath;
@@ -147,6 +151,7 @@ class _SettingsPageState extends State<SettingsPage>
     _inspectionFocusNode = FocusNode();
     _reportFooterFocusNode = FocusNode();
     _sloganFocusNode = FocusNode();
+    _registrationFeesFocusNode = FocusNode();
 
     _loadSchoolSettings();
     _academicYearController.text = _academicYear;
@@ -178,6 +183,7 @@ class _SettingsPageState extends State<SettingsPage>
     _inspectionController.dispose();
     _reportFooterController.dispose();
     _sloganController.dispose();
+    _registrationFeesController.dispose();
 
     _etablissementFocusNode.dispose();
     _adresseFocusNode.dispose();
@@ -200,6 +206,7 @@ class _SettingsPageState extends State<SettingsPage>
     _inspectionFocusNode.dispose();
     _reportFooterFocusNode.dispose();
     _sloganFocusNode.dispose();
+    _registrationFeesFocusNode.dispose();
     _academicYearController.dispose();
     super.dispose();
   }
@@ -236,7 +243,10 @@ class _SettingsPageState extends State<SettingsPage>
       _reportFooterController.text =
           prefs.getString('report_card_footer_note') ?? '';
       _sloganController.text =
-          prefs.getString('school_slogan') ?? PdfService.defaultReportFooterNote;
+          prefs.getString('school_slogan') ??
+          PdfService.defaultReportFooterNote;
+      _registrationFeesController.text =
+          prefs.getDouble('school_registration_fees')?.toString() ?? '0';
       _logoPath = prefs.getString('school_logo');
       _flagPath = prefs.getString('school_flag');
       _isDarkMode = prefs.getBool('dark_mode') ?? false;
@@ -279,6 +289,10 @@ class _SettingsPageState extends State<SettingsPage>
   Future<void> _saveSchoolSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('school_name', _etablissementController.text.trim());
+    await prefs.setDouble(
+      'school_registration_fees',
+      double.tryParse(_registrationFeesController.text) ?? 0.0,
+    );
     await prefs.setString('school_address', _adresseController.text.trim());
     await prefs.setString('school_bp', _bpController.text.trim());
     await prefs.setString('school_phone', _telephoneController.text.trim());
@@ -376,6 +390,9 @@ class _SettingsPageState extends State<SettingsPage>
         educationDirection: _educationDirectionController.text.trim(),
         inspection: _inspectionController.text.trim(),
         slogan: _sloganController.text.trim(),
+        registrationFees: double.tryParse(
+          _registrationFeesController.text.trim(),
+        ),
       );
       await DatabaseService().insertSchoolInfo(info);
     } catch (_) {}
@@ -389,17 +406,6 @@ class _SettingsPageState extends State<SettingsPage>
         'Configuration de l\'école sauvegardée avec succès !',
       );
     }
-    // Audit: paramètres mis à jour
-    try {
-      final u = await AuthService.instance.getCurrentUser();
-      await DatabaseService().logAudit(
-        category: 'settings',
-        action: 'update_settings',
-        username: u?.username,
-        details:
-            'name=${_etablissementController.text.trim()} email=${_emailController.text.trim()} year=${academicYearNotifier.value}',
-      );
-    } catch (_) {}
   }
 
   Future<void> _applyAcademicYear(String year) async {
@@ -1006,7 +1012,8 @@ class _SettingsPageState extends State<SettingsPage>
                 .map((s) => {'student': s, 'classe': null})
                 .toList(),
           );
-          final fileName = 'export_eleves_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final fileName =
+              'export_eleves_${DateTime.now().millisecondsSinceEpoch}.pdf';
           final file = File('$dirPath/$fileName');
           await PdfService.ensureParentDirectory(file);
           await file.writeAsBytes(pdfBytes);
@@ -1016,7 +1023,8 @@ class _SettingsPageState extends State<SettingsPage>
         if (classes.isNotEmpty) {
           // Génération PDF classes (simple)
           final pdf = await PdfService.exportClassesListPdf(classes: classes);
-          final fileName = 'export_classes_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final fileName =
+              'export_classes_${DateTime.now().millisecondsSinceEpoch}.pdf';
           final file = File('$dirPath/$fileName');
           await PdfService.ensureParentDirectory(file);
           await file.writeAsBytes(pdf);
@@ -1041,7 +1049,8 @@ class _SettingsPageState extends State<SettingsPage>
               )
               .toList();
           final pdfBytes = await PdfService.exportPaymentsListPdf(rows: rows);
-          final fileName = 'export_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final fileName =
+              'export_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf';
           final file = File('$dirPath/$fileName');
           await PdfService.ensureParentDirectory(file);
           await file.writeAsBytes(pdfBytes);
@@ -1087,7 +1096,8 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ];
           final csvStr = const ListToCsvConverter().convert(csvRows);
-          final fileName = 'export_eleves_${DateTime.now().millisecondsSinceEpoch}.csv';
+          final fileName =
+              'export_eleves_${DateTime.now().millisecondsSinceEpoch}.csv';
           final file = File('$dirPath/$fileName');
           await PdfService.ensureParentDirectory(file);
           await file.writeAsString(csvStr);
@@ -1108,13 +1118,14 @@ class _SettingsPageState extends State<SettingsPage>
                 c.name,
                 c.academicYear,
                 c.titulaire ?? '',
-                c.fraisEcole ?? '',
+                c.ecolage ?? '',
                 c.fraisCotisationParallele ?? '',
               ],
             ),
           ];
           final csvStr = const ListToCsvConverter().convert(csvRows);
-          final fileName = 'export_classes_${DateTime.now().millisecondsSinceEpoch}.csv';
+          final fileName =
+              'export_classes_${DateTime.now().millisecondsSinceEpoch}.csv';
           final file = File('$dirPath/$fileName');
           await PdfService.ensureParentDirectory(file);
           await file.writeAsString(csvStr);
@@ -1147,7 +1158,8 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ];
           final csvStr = const ListToCsvConverter().convert(csvRows);
-          final fileName = 'export_paiements_${DateTime.now().millisecondsSinceEpoch}.csv';
+          final fileName =
+              'export_paiements_${DateTime.now().millisecondsSinceEpoch}.csv';
           final file = File('$dirPath/$fileName');
           await PdfService.ensureParentDirectory(file);
           await file.writeAsString(csvStr);
@@ -1158,7 +1170,8 @@ class _SettingsPageState extends State<SettingsPage>
       // ZIP
       if (format == 'ZIP' && filesToZip.isNotEmpty) {
         final encoder = ZipFileEncoder();
-        final zipFileName = 'export_donnees_${DateTime.now().millisecondsSinceEpoch}.zip';
+        final zipFileName =
+            'export_donnees_${DateTime.now().millisecondsSinceEpoch}.zip';
         final zipPath = '$dirPath/$zipFileName';
         final zipFile = File(zipPath);
         await PdfService.ensureParentDirectory(zipFile);
@@ -1818,13 +1831,12 @@ class _SettingsPageState extends State<SettingsPage>
         dialogTitle: 'Choisissez un dossier de sauvegarde',
       );
       if (dirPath == null) return;
-      final fileName = 'statistiques_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final fileName =
+          'statistiques_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('$dirPath/$fileName');
       await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes);
-      _showModernSnackBar(
-        'Statistiques exportées: $fileName',
-      );
+      _showModernSnackBar('Statistiques exportées: $fileName');
     } catch (e) {
       _showModernSnackBar('Erreur export statistiques: $e', isError: true);
     }
@@ -2396,6 +2408,16 @@ class _SettingsPageState extends State<SettingsPage>
                 prefixIcon: Icons.account_balance,
                 textInputAction: TextInputAction.next,
                 onFieldSubmitted: (_) =>
+                    _registrationFeesFocusNode.requestFocus(),
+              ),
+              _buildModernTextField(
+                controller: _registrationFeesController,
+                focusNode: _registrationFeesFocusNode,
+                label: 'Frais d\'inscription (par défaut)',
+                prefixIcon: Icons.payments_outlined,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) =>
                     _codeEtablissementFocusNode.requestFocus(),
               ),
               _buildModernTextField(
@@ -2710,17 +2732,6 @@ class _SettingsPageState extends State<SettingsPage>
                   });
                 },
               ),
-              _buildModernSwitch(
-                title: 'Authentification a double facteur',
-                subtitle: 'connection à 2 niveau ',
-                value: _biometricEnabled,
-                icon: Icons.fingerprint,
-                onChanged: (value) {
-                  setState(() {
-                    _biometricEnabled = value;
-                  });
-                },
-              ),
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(16),
@@ -3027,35 +3038,6 @@ class _SettingsPageState extends State<SettingsPage>
             ],
             'keywords': ['données', 'sauvegarde', 'restauration', 'export'],
           },
-          // {
-          //   'title': 'Sécurité',
-          //   'icon': Icons.security,
-          //   'children': [
-          //     _buildModernActionButton(
-          //             label: 'Changer le mot de passe administrateur',
-          //             icon: Icons.lock_reset,
-          //             onPressed: () {
-          //         _showModernSnackBar('Changement de mot de passe bientôt disponible.', isError: true);
-          //             },
-          //       gradientStart: const Color(0xFF7C3AED),
-          //       gradientEnd: const Color(0xFF9F7AEA),
-          //       tooltip: 'Modifier le mot de passe admin (bientôt disponible)',
-          //           ),
-          //     _buildModernActionButton(
-          //             label: 'Gestion des utilisateurs',
-          //             icon: Icons.admin_panel_settings,
-          //             onPressed: () {
-          //               Navigator.of(context).push(
-          //                 MaterialPageRoute(builder: (_) => const UsersManagementPage()),
-          //               );
-          //             },
-          //       gradientStart: const Color(0xFF1E40AF),
-          //       gradientEnd: const Color(0xFF3B82F6),
-          //       tooltip: 'Créer / supprimer des comptes, activer 2FA',
-          //           ),
-          //         ],
-          //   'keywords': ['sécurité', 'mot de passe', 'permissions'],
-          // },
           {
             'title': 'À propos',
             'icon': Icons.info,

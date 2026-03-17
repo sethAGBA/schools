@@ -2484,9 +2484,13 @@ class _StudentProfilePageState extends State<StudentProfilePage>
                                         (sum, item) => sum + item.amount,
                                       );
                                   final totalDue =
-                                      (studentClass.fraisEcole ?? 0) +
+                                      (studentClass.ecolage ?? 0) +
                                       (studentClass.fraisCotisationParallele ??
-                                          0);
+                                          0) +
+                                      (widget.student.typeInscription ==
+                                              'Nouvelle inscription'
+                                          ? (studentClass.fraisInscription ?? 0)
+                                          : 0);
                                   final schoolInfo = await loadSchoolInfo();
                                   final pdfBytes =
                                       await PdfService.generatePaymentReceiptPdf(

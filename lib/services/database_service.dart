@@ -604,7 +604,8 @@ class DatabaseService {
             republicMotto TEXT,
             educationDirection TEXT,
             inspection TEXT,
-            slogan TEXT
+            slogan TEXT,
+            registrationFees REAL
           )
         ''');
         await db.execute('''
@@ -2599,7 +2600,8 @@ class DatabaseService {
           republicMotto TEXT,
           educationDirection TEXT,
           inspection TEXT,
-          slogan TEXT
+          slogan TEXT,
+          registrationFees REAL
         )
       ''');
       debugPrint(
@@ -2632,6 +2634,7 @@ class DatabaseService {
       'civilityLycee TEXT',
       'civilityUniversity TEXT',
       'slogan TEXT',
+      'registrationFees REAL',
     ];
 
     for (final columnDef in newColumns) {

@@ -249,7 +249,7 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
       if (_selectedClassFilter != null && _selectedClassFilter!.isNotEmpty) {
         if (c.name != _selectedClassFilter) continue;
       }
-      final double unitFee = (c.fraisEcole ?? 0) + (c.fraisCotisationParallele ?? 0);
+      final double unitFee = (c.ecolage ?? 0) + (c.fraisCotisationParallele ?? 0);
       if (unitFee <= 0) continue;
       final students = await _db.getStudentsByClassAndClassYear(c.name, selectedYear);
       expectedTotal += unitFee * (students.length);
@@ -1013,7 +1013,8 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
       }
       depByClass[cls] = (depByClass[cls] ?? 0) + e.amount;
     }
-    // Compute expected amount per class = (fraisEcole + fraisCotisationParallele) * nb élèves de la classe (année sélectionnée)
+    // Compute expected amount per class = (ecolage + fraisCotisationParallele) * nb élèves de la classe (année sélectionnée)
+    // plus enrollment fees for new students
     final Map<String, double> expectedByClass = {};
     final Map<String, int> countByClass = {};
     final Map<String, double> unitFeeByClass = {};
@@ -1022,7 +1023,7 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
       if (_selectedClassFilter != null && _selectedClassFilter!.isNotEmpty) {
         if (c.name != _selectedClassFilter) continue;
       }
-      final double unitFee = (c.fraisEcole ?? 0) + (c.fraisCotisationParallele ?? 0);
+      final double unitFee = (c.ecolage ?? 0) + (c.fraisCotisationParallele ?? 0);
       if (unitFee <= 0) {
         expectedByClass[c.name] = 0.0;
         countByClass[c.name] = 0;
