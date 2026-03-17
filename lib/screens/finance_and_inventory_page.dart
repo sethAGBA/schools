@@ -13,6 +13,7 @@ import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:school_manager/screens/students/widgets/form_field.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/utils/snackbar.dart';
+import 'package:school_manager/services/pdf_service.dart';
 
 import 'dart:io';
 import 'package:excel/excel.dart' hide Border;
@@ -208,10 +209,12 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
       TextCellValue('Solde Net'),
       DoubleCellValue(totalEnc - totalDep),
     ]);
-    final fileName = 'finances_${(_selectedYearFilter ?? _year).replaceAll('/', '_')}.xlsx';
+    final safeYear = PdfService.sanitizeFileName(_selectedYearFilter ?? selectedYear);
+    final fileName = 'finances_$safeYear.xlsx';
+    final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     final bytes = excel.encode();
     if (bytes != null) {
-      final file = File('$directory/$fileName');
       await file.writeAsBytes(bytes);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -252,15 +255,16 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
       expectedTotal += unitFee * (students.length);
     }
     final remainingTotal = (expectedTotal - total) < 0 ? 0 : (expectedTotal - total);
-    // Student names for display
-    final students = await _db.getStudents();
+    // Student names for display (including deleted students for history)
+    final students = await _db.getStudents(includeDeleted: true);
     final Map<String, String> studentNames = {
       for (final s in students) s.id: s.name,
     };
     // Load school info and fonts for consistent design
     final schoolInfo = await _db.getSchoolInfo();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -423,8 +427,22 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                   ),
                 ),
                 pw.SizedBox(height: 12),
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              pw.TableHelper.fromTextArray(
+                context: ctx,
+                headerStyle: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white),
+                cellStyle: pw.TextStyle(font: times, fontSize: 10),
+                headerDecoration: pw.BoxDecoration(color: accent),
+                headers: ['Date', 'Classe', 'Élève', 'Montant', 'Commentaire'],
+                data: [
+                  ...payments.map((p) => [
+                        DateFormat('dd/MM/yyyy').format(DateTime.parse(p.date)),
+                        p.className,
+                        studentNames[p.studentId] ?? p.studentId,
+                        formatter.format(p.amount),
+                        p.comment ?? '',
+                      ]),
+                  ['', '', 'TOTAL', formatter.format(total), ''],
+                ],
                 columnWidths: {
                   0: const pw.FlexColumnWidth(2),
                   1: const pw.FlexColumnWidth(2),
@@ -432,48 +450,13 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                   3: const pw.FlexColumnWidth(2),
                   4: const pw.FlexColumnWidth(3),
                 },
-                children: [
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: accent, borderRadius: pw.BorderRadius.circular(4)),
-                    children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Date', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Classe', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Élève', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Montant', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Commentaire', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                    ],
-                  ),
-                  ...payments.map((p) => pw.TableRow(children: [
-                        _pdfCell(DateFormat('dd/MM/yyyy').format(DateTime.parse(p.date))),
-                        _pdfCell(p.className),
-                        _pdfCell(studentNames[p.studentId] ?? p.studentId),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Align(
-                            alignment: pw.Alignment.centerRight,
-                            child: pw.Text(formatter.format(p.amount), style: const pw.TextStyle(fontSize: 10)),
-                          ),
-                        ),
-                        _pdfCell(p.comment ?? ''),
-                      ])),
-                  // Total row
-                  pw.TableRow(children: [
-                    _pdfCell(''),
-                    _pdfCell(''),
-                    _pdfCell('TOTAL'),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
-                      child: pw.Align(
-                        alignment: pw.Alignment.centerRight,
-                        child: pw.Text(
-                          formatter.format(total),
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                    _pdfCell(''),
-                  ]),
-                ],
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.centerRight,
+                  4: pw.Alignment.centerLeft,
+                },
               ),
               pw.SizedBox(height: 16),
               pw.Container(
@@ -482,8 +465,22 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                 child: pw.Text('Dépenses', style: pw.TextStyle(font: timesBold, fontSize: 14, color: PdfColors.white)),
               ),
               pw.SizedBox(height: 6),
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              pw.TableHelper.fromTextArray(
+                context: ctx,
+                headerStyle: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white),
+                cellStyle: pw.TextStyle(font: times, fontSize: 10),
+                headerDecoration: pw.BoxDecoration(color: accent),
+                headers: ['Date', 'Libellé', 'Catégorie', 'Fournisseur', 'Montant'],
+                data: [
+                  ...expenses.map((e) => [
+                        DateFormat('dd/MM/yyyy').format(DateTime.parse(e.date)),
+                        e.label,
+                        e.category ?? '',
+                        e.supplier ?? '',
+                        formatter.format(e.amount),
+                      ]),
+                  ['', '', '', 'TOTAL', formatter.format(depTotal)],
+                ],
                 columnWidths: {
                   0: const pw.FlexColumnWidth(2),
                   1: const pw.FlexColumnWidth(3),
@@ -491,48 +488,13 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                   3: const pw.FlexColumnWidth(3),
                   4: const pw.FlexColumnWidth(2),
                 },
-                children: [
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: accent, borderRadius: pw.BorderRadius.circular(4)),
-                    children: [
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Date', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Libellé', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Catégorie', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Fournisseur', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Montant', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                    ],
-                  ),
-                  ...expenses.map((e) => pw.TableRow(children: [
-                        _pdfCell(DateFormat('dd/MM/yyyy').format(DateTime.parse(e.date))),
-                        _pdfCell(e.label),
-                        _pdfCell(e.category ?? ''),
-                        _pdfCell(e.supplier ?? ''),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Align(
-                            alignment: pw.Alignment.centerRight,
-                            child: pw.Text(formatter.format(e.amount), style: const pw.TextStyle(fontSize: 10)),
-                          ),
-                        ),
-                      ])),
-                  // Total row
-                  pw.TableRow(children: [
-                    _pdfCell(''),
-                    _pdfCell(''),
-                    _pdfCell(''),
-                    _pdfCell('TOTAL'),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(6),
-                      child: pw.Align(
-                        alignment: pw.Alignment.centerRight,
-                        child: pw.Text(
-                          formatter.format(depTotal),
-                          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ]),
-                ],
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.centerLeft,
+                  4: pw.Alignment.centerRight,
+                },
               ),
               pw.SizedBox(height: 14),
               // Signature & cachet
@@ -578,8 +540,10 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
         },
       ),
     );
-    final fileName = 'finances_${(_selectedYearFilter ?? _year).replaceAll('/', '_')}.pdf';
+    final safeYear = PdfService.sanitizeFileName(_selectedYearFilter ?? selectedYear);
+    final fileName = 'finances_$safeYear.pdf';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(await pdf.save());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -633,10 +597,13 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
        TextCellValue(''),
        TextCellValue(''),
     ]);
-    final fileName = 'inventaire_${(_selectedYearFilter ?? _year).replaceAll('/', '_')}.xlsx';
+    final safeYearFilter = _selectedYearFilter ?? _year;
+    final safeYear = PdfService.sanitizeFileName(safeYearFilter);
+    final fileName = 'inventaire_$safeYear.xlsx';
+    final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     final bytes = excel.encode();
     if (bytes != null) {
-      final file = File('$directory/$fileName');
       await file.writeAsBytes(bytes);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -667,8 +634,9 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
     final totalQty = _inventoryItems.fold<double>(0.0, (sum, it) => sum + it.quantity.toDouble());
     // Load school info and fonts
     final schoolInfo = await _db.getSchoolInfo();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -805,10 +773,26 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                 ),
                 pw.SizedBox(height: 8),
                 if (_inventoryItems.isEmpty)
-                  pw.Text('Aucune donnée d\'inventaire disponible.')
+                  pw.Text('Aucune donnée d\'inventaire disponible.', style: pw.TextStyle(font: times, fontSize: 10))
                 else
-                  pw.Table(
-                    border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                  pw.TableHelper.fromTextArray(
+                    context: ctx,
+                    headerStyle: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white),
+                    cellStyle: pw.TextStyle(font: times, fontSize: 10),
+                    headerDecoration: pw.BoxDecoration(color: accent),
+                    headers: ['Catégorie', 'Article', 'Qté', 'Localisation', 'État', 'Valeur', 'Classe/Année'],
+                    data: [
+                      ..._inventoryItems.map((it) => [
+                            it.category,
+                            it.name,
+                            it.quantity.toString(),
+                            it.location ?? '',
+                            it.itemCondition ?? '',
+                            it.value == null ? '' : formatter.format(it.value!),
+                            '${it.className ?? '-'} / ${it.academicYear}',
+                          ]),
+                      ['', 'TOTALS', totalQty.toStringAsFixed(0), '', '', formatter.format(totalVal), ''],
+                    ],
                     columnWidths: {
                       0: const pw.FlexColumnWidth(2),
                       1: const pw.FlexColumnWidth(3),
@@ -818,58 +802,16 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                       5: const pw.FlexColumnWidth(2),
                       6: const pw.FlexColumnWidth(2),
                     },
-                    children: [
-                      pw.TableRow(
-                        decoration: pw.BoxDecoration(color: accent, borderRadius: pw.BorderRadius.circular(4)),
-                        children: [
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Catégorie', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Article', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Qté', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Localisation', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('État', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Valeur', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                          pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Classe/Année', style: pw.TextStyle(font: timesBold, fontSize: 10, color: PdfColors.white))),
-                        ],
-                      ),
-                      ..._inventoryItems.map((it) => pw.TableRow(children: [
-                            _pdfCell(it.category),
-                            _pdfCell(it.name),
-                            _pdfCell(it.quantity.toString()),
-                            _pdfCell(it.location ?? ''),
-                            _pdfCell(it.itemCondition ?? ''),
-                            pw.Padding(
-                              padding: const pw.EdgeInsets.all(6),
-                              child: pw.Align(
-                                alignment: pw.Alignment.centerRight,
-                                child: pw.Text(
-                                  it.value == null ? '' : formatter.format(it.value!),
-                                  style: const pw.TextStyle(fontSize: 10),
-                                ),
-                              ),
-                            ),
-                            _pdfCell('${it.className ?? '-'} / ${it.academicYear}'),
-                          ])),
-                      // Totaux
-                      pw.TableRow(children: [
-                        _pdfCell(''),
-                        _pdfCell('TOTALS'),
-                        _pdfCell(totalQty.toStringAsFixed(0)),
-                        _pdfCell(''),
-                        _pdfCell(''),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(6),
-                          child: pw.Align(
-                            alignment: pw.Alignment.centerRight,
-                            child: pw.Text(
-                              formatter.format(totalVal),
-                              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        _pdfCell(''),
-                      ]),
-                    ],
-                ),
+                    cellAlignments: {
+                      0: pw.Alignment.centerLeft,
+                      1: pw.Alignment.centerLeft,
+                      2: pw.Alignment.centerLeft,
+                      3: pw.Alignment.centerLeft,
+                      4: pw.Alignment.centerLeft,
+                      5: pw.Alignment.centerRight,
+                      6: pw.Alignment.centerLeft,
+                    },
+                  ),
                 pw.SizedBox(height: 14),
                 // Signature & cachet
                 pw.Row(
@@ -914,8 +856,11 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
         },
       ),
     );
-    final fileName = 'inventaire_${(_selectedYearFilter ?? _year).replaceAll('/', '_')}.pdf';
+    final safeYearFilter = _selectedYearFilter ?? _year;
+    final safeYear = PdfService.sanitizeFileName(safeYearFilter);
+    final fileName = 'inventaire_$safeYear.pdf';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(await pdf.save());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -998,12 +943,6 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
     );
   }
 
-  pw.Widget _pdfCell(String text, {bool bold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(text, style: pw.TextStyle(fontSize: 10, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-    );
-  }
 
   @override
   void initState() {
@@ -2234,8 +2173,9 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
     final title = 'Récapitulatif par classe - Année ${selectedYear}';
     final formatter = NumberFormat('#,##0 FCFA', 'fr_FR');
     final schoolInfo = await _db.getSchoolInfo();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final list = _filteredSortedPerClass();
@@ -2408,8 +2348,10 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
         },
       ),
     );
-    final fileName = 'finances_par_classe_${selectedYear.replaceAll('/', '_')}.pdf';
+    final safeYear = PdfService.sanitizeFileName(selectedYear);
+    final fileName = 'finances_par_classe_$safeYear.pdf';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(await pdf.save());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2464,10 +2406,12 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
       DoubleCellValue(tExp),
       DoubleCellValue(tRem),
     ]);
-    final fileName = 'finances_par_classe_${selectedYear.replaceAll('/', '_')}.xlsx';
+    final safeYear = PdfService.sanitizeFileName(selectedYear);
+    final fileName = 'finances_par_classe_$safeYear.xlsx';
     final bytes = excel.encode();
     if (bytes != null) {
       final file = File('$directory/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

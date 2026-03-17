@@ -1092,13 +1092,15 @@ class _LibraryPageState extends State<LibraryPage> {
       );
       if (directoryPath == null) return;
 
-      final safeStudentName = (studentName ?? '').trim().isEmpty
-          ? 'Eleve'
-          : studentName!.trim().replaceAll(' ', '_');
-      final fileName = 'Ticket_Bibliotheque_${safeStudentName}_$id.pdf'
-          .replaceAll('/', '_');
-      final file = File('$directoryPath/$fileName');
-      debugPrint('[Library] Ticket: saving path=${file.path}');
+      final safeName = PdfService.sanitizeFileName(
+        (studentName ?? 'Emprunteur').trim().isEmpty
+            ? 'Emprunteur'
+            : (studentName ?? 'Emprunteur').trim(),
+      );
+      final fileName = PdfService.sanitizeFileName('ticket_bibliotheque_$safeName');
+      final path = '$directoryPath/$fileName.pdf';
+      final file = File(path);
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(pdfBytes, flush: true);
       if (!mounted) return;
       showSnackBar(context, 'Ticket enregistré dans $directoryPath');

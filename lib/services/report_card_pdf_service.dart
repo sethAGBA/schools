@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -12,6 +11,7 @@ import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/models/signature.dart';
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/services/signature_pdf_service.dart';
 
@@ -201,8 +201,9 @@ class ReportCardPdfService {
   }) async {
     _checkSafeMode(); // Vérifier le mode coffre fort
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final secondaryColor = PdfColors.blueGrey800;
     final mainColor = PdfColors.blue800;
     final tableHeaderBg = PdfColors.blue200;
@@ -420,20 +421,44 @@ class ReportCardPdfService {
       pw.MultiPage(
         pageTheme: _pageTheme,
         footer: (context) {
-          if (resolvedFooterNote.isEmpty) return pw.SizedBox();
+          final slogan = (schoolInfo.slogan ?? '').trim();
+          final hasSlogan = slogan.isNotEmpty;
+          final hasNote = resolvedFooterNote.isNotEmpty;
+          if (!hasSlogan && !hasNote) return pw.SizedBox();
+
           return pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 4),
-            child: pw.Center(
-              child: pw.Text(
-                resolvedFooterNote,
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(
-                  font: timesBold,
-                  fontSize: footerFont,
-                  color: secondaryColor,
-                  fontStyle: pw.FontStyle.italic,
-                ),
-              ),
+            padding: const pw.EdgeInsets.only(top: 4, bottom: 4),
+            child: pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                if (hasSlogan)
+                  pw.Center(
+                    child: pw.Text(
+                      slogan,
+                      textAlign: pw.TextAlign.center,
+                      style: pw.TextStyle(
+                        font: times,
+                        fontSize: footerFont - 0.5,
+                        color: secondaryColor,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                if (hasSlogan && hasNote) pw.SizedBox(height: 2),
+                if (hasNote)
+                  pw.Center(
+                    child: pw.Text(
+                      resolvedFooterNote,
+                      textAlign: pw.TextAlign.center,
+                      style: pw.TextStyle(
+                        font: timesBold,
+                        fontSize: footerFont,
+                        color: secondaryColor,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           );
         },
@@ -541,7 +566,9 @@ class ReportCardPdfService {
                       child: (schoolInfo.ministry ?? '').isNotEmpty
                           ? () {
                               final parts = _splitTwoLines(
-                                schoolInfo.ministry ?? '',
+                                PdfService.sanitizeForPdf(
+                                  schoolInfo.ministry ?? '',
+                                ),
                               );
                               if (parts.isEmpty) return pw.SizedBox();
                               final hasTwo = parts.length > 1;
@@ -560,7 +587,7 @@ class ReportCardPdfService {
                               const double rightFlex = 2;
                               final double totalFlex =
                                   leftFlex + centerFlex + rightFlex;
-                              final leftColWidth =
+                              final double leftColWidth =
                                   contentWidth * (leftFlex / totalFlex);
                               // Ajuste la taille si nécessaire pour forcer 2 lignes sans wrap
                               double fs = baseFs;
@@ -635,7 +662,7 @@ class ReportCardPdfService {
                                       .isNotEmpty) ...[
                                     pw.SizedBox(height: isLandscape ? 3 : 6),
                                     pw.Text(
-                                      'Inspection: ${schoolInfo.inspection}',
+                                      'Inspection: ${PdfService.sanitizeForPdf(schoolInfo.inspection!)}',
                                       style: pw.TextStyle(
                                         font: times,
                                         fontSize: smallFont + 1,
@@ -698,7 +725,7 @@ class ReportCardPdfService {
                               ),
                             ),
                           pw.Text(
-                            schoolInfo.name,
+                            PdfService.sanitizeForPdf(schoolInfo.name.toUpperCase()),
                             textAlign: pw.TextAlign.center,
                             style: pw.TextStyle(
                               font: timesBold,
@@ -726,9 +753,9 @@ class ReportCardPdfService {
                             pw.SizedBox(height: 1),
                             pw.Text(
                               [
-                                if (mailEtab.isNotEmpty) 'Email: ' + mailEtab,
-                                if (webEtab.isNotEmpty) 'Site: ' + webEtab,
-                                if (telEtab.isNotEmpty) 'Tél: ' + telEtab,
+                                if (mailEtab.isNotEmpty) 'Email: ' + PdfService.sanitizeForPdf(mailEtab),
+                                if (webEtab.isNotEmpty) 'Site: ' + PdfService.sanitizeForPdf(webEtab),
+                                if (telEtab.isNotEmpty) 'Tél: ' + PdfService.sanitizeForPdf(telEtab),
                               ].join('  |  '),
                               textAlign: pw.TextAlign.center,
                               style: pw.TextStyle(
@@ -751,8 +778,9 @@ class ReportCardPdfService {
                           crossAxisAlignment: pw.CrossAxisAlignment.center,
                           children: [
                             pw.Text(
-                              ((schoolInfo.republic ?? 'RÉPUBLIQUE')
-                                  .toUpperCase()),
+                              PdfService.sanitizeForPdf(
+                                  (schoolInfo.republic ?? 'RÉPUBLIQUE')
+                                      .toUpperCase()),
                               style: pw.TextStyle(
                                 font: timesBold,
                                 fontSize: smallFont + 1,
@@ -763,7 +791,7 @@ class ReportCardPdfService {
                               pw.Padding(
                                 padding: const pw.EdgeInsets.only(top: 2),
                                 child: pw.Text(
-                                  schoolInfo.republicMotto!,
+                                  PdfService.sanitizeForPdf(schoolInfo.republicMotto!),
                                   style: pw.TextStyle(
                                     font: times,
                                     fontStyle: pw.FontStyle.italic,
@@ -780,7 +808,7 @@ class ReportCardPdfService {
                                   top: isLandscape ? 3 : 6,
                                 ),
                                 child: pw.Text(
-                                  "Direction de l'enseignement: ${schoolInfo.educationDirection}",
+                                  "Direction de l'enseignement: ${PdfService.sanitizeForPdf(schoolInfo.educationDirection!)}",
                                   style: pw.TextStyle(
                                     font: times,
                                     fontSize: smallFont + 1,

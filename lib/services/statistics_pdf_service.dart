@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:flutter/services.dart' show rootBundle, Uint8List;
 
 class StatisticsPdfService {
@@ -531,11 +532,8 @@ class StatisticsPdfService {
   }
 
   Future<_PdfFonts> _loadFonts() async {
-    final regular = await rootBundle.load(
-      'assets/fonts/nunito/Nunito-Regular.ttf',
-    );
-    final bold = await rootBundle.load('assets/fonts/nunito/Nunito-Bold.ttf');
-    return _PdfFonts(regular: pw.Font.ttf(regular), bold: pw.Font.ttf(bold));
+    final fonts = await PdfService.loadPdfFonts();
+    return _PdfFonts(regular: fonts.regular, bold: fonts.bold);
   }
 }
 

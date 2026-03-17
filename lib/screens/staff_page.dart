@@ -2400,9 +2400,10 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
       title: 'Liste du Personnel - Année $currentAcademicYear',
     );
 
-    final fileName =
-        'liste_du_personnel_${currentAcademicYear.replaceAll('/', '_')}.pdf';
+    final safeYear = PdfService.sanitizeFileName(currentAcademicYear);
+    final fileName = 'liste_du_personnel_$safeYear.pdf';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(bytes);
     OpenFile.open(file.path);
 
@@ -2490,9 +2491,11 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
       title: 'Fiche individuelle - ${staff.name}',
     );
 
-    final fileName =
-        'fiche_${staff.name.replaceAll(' ', '_')}_${currentAcademicYear.replaceAll('/', '_')}.pdf';
+    final safeName = PdfService.sanitizeFileName(staff.name);
+    final safeYear = PdfService.sanitizeFileName(currentAcademicYear);
+    final fileName = 'fiche_${safeName}_$safeYear.pdf';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(bytes);
     OpenFile.open(file.path);
 
@@ -2587,9 +2590,11 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
     }
 
     final String currentAcademicYear = await getCurrentAcademicYear();
-    final fileName =
-        'fiche_${staff.name.replaceAll(' ', '_')}_${currentAcademicYear.replaceAll('/', '_')}.xlsx';
+    final safeName = PdfService.sanitizeFileName(staff.name);
+    final safeYear = PdfService.sanitizeFileName(currentAcademicYear);
+    final fileName = 'fiche_${safeName}_$safeYear.xlsx';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     final bytes = excel.encode();
     if (bytes != null) {
       await file.writeAsBytes(bytes);
@@ -2744,9 +2749,10 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
     }
 
     final String currentAcademicYear = await getCurrentAcademicYear();
-    final fileName =
-        'liste_du_personnel_${currentAcademicYear.replaceAll('/', '_')}.xlsx';
+    final safeYear = PdfService.sanitizeFileName(currentAcademicYear);
+    final fileName = 'liste_du_personnel_$safeYear.xlsx';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     final bytes = excel.encode();
     if (bytes != null) {
       await file.writeAsBytes(bytes);

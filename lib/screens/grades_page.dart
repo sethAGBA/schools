@@ -7703,11 +7703,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                               'Choisir le dossier de sauvegarde',
                                         );
                                     if (directoryPath != null) {
+                                      final studentName =
+                                          '${student.firstName}_${student.lastName}';
+                                      final safeStudentName =
+                                          PdfService.sanitizeFileName(studentName);
                                       final fileName =
-                                          'Bulletin_compact_${'${student.firstName}_${student.lastName}'.replaceAll(' ', '_')}_${selectedTerm ?? ''}_${selectedAcademicYear ?? ''}.pdf';
-                                      final file = File(
-                                        '$directoryPath/$fileName',
-                                      );
+                                          'Bulletin_compact_${safeStudentName}_${(selectedTerm ?? '').replaceAll(' ', '_')}_${(selectedAcademicYear ?? '').replaceAll('/', '_')}.pdf';
+                                      final file = File('$directoryPath/$fileName');
+                                      await PdfService.ensureParentDirectory(file);
                                       await file.writeAsBytes(pdfBytes);
                                       ScaffoldMessenger.of(
                                         context,
@@ -7960,11 +7963,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                               'Choisir le dossier de sauvegarde',
                                         );
                                     if (directoryPath != null) {
+                                      final studentName =
+                                          '${student.firstName}_${student.lastName}';
+                                      final safeStudentName =
+                                          PdfService.sanitizeFileName(studentName);
                                       final fileName =
-                                          'Bulletin_ultra_compact_${'${student.firstName}_${student.lastName}'.replaceAll(' ', '_')}_${selectedTerm ?? ''}_${selectedAcademicYear ?? ''}.pdf';
-                                      final file = File(
-                                        '$directoryPath/$fileName',
-                                      );
+                                          'Bulletin_ultra_compact_${safeStudentName}_${(selectedTerm ?? '').replaceAll(' ', '_')}_${(selectedAcademicYear ?? '').replaceAll('/', '_')}.pdf';
+                                      final file = File('$directoryPath/$fileName');
+                                      await PdfService.ensureParentDirectory(file);
                                       await file.writeAsBytes(pdfBytes);
                                       ScaffoldMessenger.of(
                                         context,
@@ -8198,11 +8204,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                               'Choisir le dossier de sauvegarde',
                                         );
                                     if (directoryPath != null) {
+                                      final studentName =
+                                          '${student.firstName}_${student.lastName}';
+                                      final safeStudentName =
+                                          PdfService.sanitizeFileName(studentName);
                                       final fileName =
-                                          'Bulletin_${'${student.firstName}_${student.lastName}'.replaceAll(' ', '_')}_${selectedTerm ?? ''}_${selectedAcademicYear ?? ''}.pdf';
-                                      final file = File(
-                                        '$directoryPath/$fileName',
-                                      );
+                                          'Bulletin_${safeStudentName}_${(selectedTerm ?? '').replaceAll(' ', '_')}_${(selectedAcademicYear ?? '').replaceAll('/', '_')}.pdf';
+                                      final file = File('$directoryPath/$fileName');
+                                      await PdfService.ensureParentDirectory(file);
                                       await file.writeAsBytes(pdfBytes);
                                       ScaffoldMessenger.of(
                                         context,
@@ -9496,9 +9505,10 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       dialogTitle: 'Choisir dossier',
                                     );
                                 if (directory == null) return;
-                                final safeName =
-                                    '${student.firstName}_${student.lastName}'
-                                        .replaceAll(' ', '_');
+                                final studentName =
+                                    '${student.firstName}_${student.lastName}';
+                                final safeStudentName =
+                                    PdfService.sanitizeFileName(studentName);
                                 final safeTerm =
                                     (data['selectedTerm'] as String).replaceAll(
                                       ' ',
@@ -9509,13 +9519,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       '/',
                                       '_',
                                     );
-                                final filePath =
-                                    '$directory/Bulletin_custom_${safeName}_${safeTerm}_$safeYear.pdf';
-                                final file = File(filePath);
+                                final fileName =
+                                    PdfService.sanitizeFileName(
+                                      'Bulletin_custom_${safeStudentName}_${safeTerm}_$safeYear',
+                                    ) +
+                                    '.pdf';
+                                final file = File('$directory/$fileName');
+                                await PdfService.ensureParentDirectory(file);
                                 await file.writeAsBytes(pdfBytes, flush: true);
                                 showSnackBar(
                                   context,
-                                  'Export terminé: $filePath',
+                                  'Export terminé: ${file.path}',
                                   isError: false,
                                 );
                               } catch (e) {
@@ -12113,17 +12127,19 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       dialogTitle: 'Choisir dossier',
     );
     if (directory == null) return;
-    final safeName = '${student.firstName}_${student.lastName}'.replaceAll(
-      ' ',
-      '_',
-    );
+    final studentName = '${student.firstName}_${student.lastName}';
+    final safeStudentName = PdfService.sanitizeFileName(studentName);
     final safeTerm = term.replaceAll(' ', '_');
     final safeYear = academicYear.replaceAll('/', '_');
-    final filePath =
-        '$directory/Bulletin_custom_${safeName}_${safeTerm}_$safeYear.pdf';
-    final file = File(filePath);
+    final fileName =
+        PdfService.sanitizeFileName(
+          'Bulletin_custom_${safeStudentName}_${safeTerm}_$safeYear',
+        ) +
+        '.pdf';
+    final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(pdfBytes, flush: true);
-    showSnackBar(context, 'Export terminé: $filePath', isError: false);
+    showSnackBar(context, 'Export terminé: ${file.path}', isError: false);
   }
 
   String _resolveDirectorForLevel(SchoolInfo schoolInfo, String niveau) {
@@ -12559,9 +12575,16 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       dialogTitle: 'Choisir le dossier de sauvegarde',
     );
     if (directoryPath != null) {
+      final safeClass = PdfService.sanitizeFileName(selectedClass!);
+      final safeTerm = (selectedTerm ?? '').replaceAll(' ', '_');
+      final safeYear = (selectedAcademicYear ?? '').replaceAll('/', '_');
       final fileName =
-          'Bulletins_${selectedClass!.replaceAll(' ', '_')}_${selectedTerm ?? ''}_${selectedAcademicYear ?? ''}.zip';
+          PdfService.sanitizeFileName(
+            'Bulletins_${safeClass}_${safeTerm}_$safeYear',
+          ) +
+          '.zip';
       final file = File('$directoryPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(zipBytes);
       showRootSnackBar(
         SnackBar(
@@ -12961,9 +12984,16 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       dialogTitle: 'Choisir le dossier de sauvegarde',
     );
     if (directoryPath != null) {
+      final safeClass = PdfService.sanitizeFileName(selectedClass!);
+      final safeTerm = (selectedTerm ?? '').replaceAll(' ', '_');
+      final safeYear = (selectedAcademicYear ?? '').replaceAll('/', '_');
       final fileName =
-          'Bulletins_compact_${selectedClass!.replaceAll(' ', '_')}_${selectedTerm ?? ''}_${selectedAcademicYear ?? ''}.zip';
+          PdfService.sanitizeFileName(
+            'Bulletins_compact_${safeClass}_${safeTerm}_$safeYear',
+          ) +
+          '.zip';
       final file = File('$directoryPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(zipBytes);
       showRootSnackBar(
         SnackBar(
@@ -13354,9 +13384,16 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       dialogTitle: 'Choisir le dossier de sauvegarde',
     );
     if (directoryPath != null) {
+      final safeClass = PdfService.sanitizeFileName(selectedClass!);
+      final safeTerm = (selectedTerm ?? '').replaceAll(' ', '_');
+      final safeYear = (selectedAcademicYear ?? '').replaceAll('/', '_');
       final fileName =
-          'Bulletins_ultra_compact_${selectedClass!.replaceAll(' ', '_')}_${selectedTerm ?? ''}_${selectedAcademicYear ?? ''}.zip';
+          PdfService.sanitizeFileName(
+            'Bulletins_ultra_compact_${safeClass}_${safeTerm}_$safeYear',
+          ) +
+          '.zip';
       final file = File('$directoryPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(zipBytes);
       showRootSnackBar(
         SnackBar(
@@ -13745,15 +13782,18 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       dialogTitle: 'Choisir dossier',
     );
     if (directory == null) return;
-    final safeClass = (selectedClass ?? 'classe').replaceAll(' ', '_');
-    final String safeTerm = (selectedTerm ?? '').replaceAll(' ', '_');
-    final String safeYear = effectiveYear.replaceAll('/', '_');
-    final String stamp = DateTime.now().millisecondsSinceEpoch.toString();
-    final filePath =
-        '$directory/bulletins_custom_${safeClass}_${safeTerm}_${safeYear}_$stamp.zip';
-    final file = File(filePath);
+    final safeClass = PdfService.sanitizeFileName(selectedClass ?? 'classe');
+    final safeTerm = (selectedTerm ?? '').replaceAll(' ', '_');
+    final safeYear = effectiveYear.replaceAll('/', '_');
+    final fileName =
+        PdfService.sanitizeFileName(
+          'bulletins_custom_${safeClass}_${safeTerm}_$safeYear',
+        ) +
+        '.zip';
+    final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(zipBytes, flush: true);
-    showRootSnackBar(SnackBar(content: Text('Export terminé: $filePath')));
+    showRootSnackBar(SnackBar(content: Text('Export terminé: ${file.path}')));
   }
 
   void _showEditStudentGradesDialog(Student student) async {

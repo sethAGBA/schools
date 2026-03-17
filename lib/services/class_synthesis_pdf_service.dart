@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:school_manager/models/school_info.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 
 class ClassSynthesisPdfService {
@@ -29,8 +31,9 @@ class ClassSynthesisPdfService {
       return avgB.compareTo(avgA);
     });
 
-    final fontRegular = pw.Font.courier();
-    final fontBold = pw.Font.courierBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final fontRegular = fonts.regular;
+    final fontBold = fonts.bold;
 
     pdf.addPage(
       pw.MultiPage(
@@ -43,7 +46,7 @@ class ClassSynthesisPdfService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  schoolInfo.name.toUpperCase(),
+                  PdfService.sanitizeForPdf(schoolInfo.name).toUpperCase(),
                   style: pw.TextStyle(font: fontBold, fontSize: 14),
                 ),
                 pw.Text(

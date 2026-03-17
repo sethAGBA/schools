@@ -382,9 +382,10 @@ class _SubjectsPageState extends State<SubjectsPage>
       );
 
       // Sauvegarder le fichier
-      final fileName =
-          'matieres_${currentAcademicYear.replaceAll('/', '_')}.pdf';
+      final safeYear = PdfService.sanitizeFileName(currentAcademicYear);
+      final fileName = 'matieres_$safeYear.pdf';
       final file = File('$directory/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes);
 
       // Ouvrir le fichier
@@ -497,9 +498,10 @@ class _SubjectsPageState extends State<SubjectsPage>
       sheet.setColumnWidth(3, 35); // Description
 
       // Sauvegarder le fichier
-      final fileName =
-          'matieres_${currentAcademicYear.replaceAll('/', '_')}.xlsx';
+      final safeYear = PdfService.sanitizeFileName(currentAcademicYear);
+      final fileName = 'matieres_$safeYear.xlsx';
       final file = File('$directory/$fileName');
+      await PdfService.ensureParentDirectory(file);
       final bytes = excel.encode();
       if (bytes != null) {
         await file.writeAsBytes(bytes);

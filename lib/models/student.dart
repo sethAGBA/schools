@@ -23,9 +23,10 @@ class Student {
   final List<StudentDocument> documents;
   final bool isDeleted;
   final String? deletedAt;
+  final String typeInscription; // 'Nouvelle inscription' | 'Réinscription'
 
   // Getter pour le nom complet (compatibilité)
-  String get name => '$firstName $lastName'.trim();
+  String get name => '$lastName $firstName'.trim();
 
   Student({
     required this.id,
@@ -50,6 +51,7 @@ class Student {
     this.documents = const [],
     this.isDeleted = false,
     this.deletedAt,
+    this.typeInscription = 'Réinscription',
   });
 
   Map<String, dynamic> toMap() {
@@ -77,6 +79,7 @@ class Student {
       'documents': StudentDocument.encodeList(documents),
       'isDeleted': isDeleted ? 1 : 0,
       'deletedAt': deletedAt,
+      'typeInscription': typeInscription,
     };
   }
 
@@ -126,6 +129,7 @@ class Student {
           ? (map['isDeleted'] as int) == 1
           : (map['isDeleted']?.toString() == '1'),
       deletedAt: map['deletedAt']?.toString(),
+      typeInscription: map['typeInscription']?.toString() ?? 'Réinscription',
     );
   }
 
@@ -152,5 +156,6 @@ class Student {
     documents: const [],
     isDeleted: false,
     deletedAt: null,
+    typeInscription: 'Réinscription',
   );
 }

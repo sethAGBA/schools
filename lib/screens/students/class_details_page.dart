@@ -13,7 +13,7 @@ import 'package:school_manager/constants/strings.dart';
 import 'package:school_manager/models/class.dart';
 import 'package:school_manager/models/payment.dart';
 import 'package:school_manager/models/student.dart';
-import 'package:school_manager/models/staff.dart';
+import 'package:school_manager/models/grade.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:school_manager/screens/students/widgets/form_field.dart';
@@ -53,8 +53,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   late TextEditingController _nameController;
   late TextEditingController _yearController;
   late TextEditingController _titulaireController;
-  late TextEditingController _fraisEcoleController;
+  late TextEditingController _ecolageController;
   late TextEditingController _fraisCotisationParalleleController;
+  late TextEditingController _fraisInscriptionController;
   late TextEditingController _searchController;
   // Contrôleurs pour les seuils de passage
   late TextEditingController _seuilFelicitationsController;
@@ -81,8 +82,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   late FocusNode _nameFocusNode;
   late FocusNode _yearFocusNode;
   late FocusNode _titulaireFocusNode;
-  late FocusNode _fraisEcoleFocusNode;
+  late FocusNode _ecolageFocusNode;
   late FocusNode _fraisCotisationFocusNode;
+  late FocusNode _fraisInscriptionFocusNode;
   late FocusNode _searchFocusNode;
   // Focus nodes pour les seuils de passage
   late FocusNode _seuilFelicitationsFocusNode;
@@ -163,11 +165,14 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
     _nameController = TextEditingController(text: widget.classe.name);
     _yearController = TextEditingController(text: widget.classe.academicYear);
     _titulaireController = TextEditingController(text: widget.classe.titulaire);
-    _fraisEcoleController = TextEditingController(
-      text: widget.classe.fraisEcole?.toString() ?? '',
+    _ecolageController = TextEditingController(
+      text: widget.classe.ecolage?.toString() ?? '',
     );
     _fraisCotisationParalleleController = TextEditingController(
       text: widget.classe.fraisCotisationParallele?.toString() ?? '',
+    );
+    _fraisInscriptionController = TextEditingController(
+      text: widget.classe.fraisInscription?.toString() ?? '',
     );
     _selectedLevel = (widget.classe.level?.trim().isNotEmpty ?? false)
         ? widget.classe.level!.trim()
@@ -197,8 +202,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
     _nameFocusNode = FocusNode();
     _yearFocusNode = FocusNode();
     _titulaireFocusNode = FocusNode();
-    _fraisEcoleFocusNode = FocusNode();
+    _ecolageFocusNode = FocusNode();
     _fraisCotisationFocusNode = FocusNode();
+    _fraisInscriptionFocusNode = FocusNode();
     _searchFocusNode = FocusNode();
     // Initialisation des focus nodes pour les seuils de passage
     _seuilFelicitationsFocusNode = FocusNode();
@@ -226,8 +232,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         );
     _animationController.forward();
 
-    _fraisEcoleController.addListener(_updateTotalClasse);
+    _ecolageController.addListener(_updateTotalClasse);
     _fraisCotisationParalleleController.addListener(_updateTotalClasse);
+    _fraisInscriptionController.addListener(_updateTotalClasse);
 
     _loadClassSubjectsAndCoeffs();
 
@@ -247,8 +254,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
     _nameController.dispose();
     _yearController.dispose();
     _titulaireController.dispose();
-    _fraisEcoleController.dispose();
+    _ecolageController.dispose();
     _fraisCotisationParalleleController.dispose();
+    _fraisInscriptionController.dispose();
     _searchController.dispose();
     // Disposal des contrôleurs pour les seuils de passage
     _seuilFelicitationsController.dispose();
@@ -261,8 +269,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
     _nameFocusNode.dispose();
     _yearFocusNode.dispose();
     _titulaireFocusNode.dispose();
-    _fraisEcoleFocusNode.dispose();
+    _ecolageFocusNode.dispose();
     _fraisCotisationFocusNode.dispose();
+    _fraisInscriptionFocusNode.dispose();
     _searchFocusNode.dispose();
     // Disposal des focus nodes pour les seuils de passage
     _seuilFelicitationsFocusNode.dispose();
@@ -271,8 +280,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
     _seuilAvertissementFocusNode.dispose();
     _seuilConditionsFocusNode.dispose();
     _seuilRedoublementFocusNode.dispose();
-    _fraisEcoleController.removeListener(_updateTotalClasse);
+    _ecolageController.removeListener(_updateTotalClasse);
     _fraisCotisationParalleleController.removeListener(_updateTotalClasse);
+    _fraisInscriptionController.removeListener(_updateTotalClasse);
     super.dispose();
     for (final c in _coeffCtrls.values) c.dispose();
   }
@@ -353,8 +363,8 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         academicYear: _yearController.text,
         level: _selectedLevel,
         titulaire: _titulaireController.text,
-        fraisEcole: _fraisEcoleController.text.isNotEmpty
-            ? double.tryParse(_fraisEcoleController.text)
+        ecolage: _ecolageController.text.isNotEmpty
+            ? double.tryParse(_ecolageController.text)
             : null,
         fraisCotisationParallele:
             _fraisCotisationParalleleController.text.isNotEmpty
@@ -396,9 +406,11 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         _nameController.text = cls.name;
         _yearController.text = cls.academicYear;
         _titulaireController.text = cls.titulaire ?? '';
-        _fraisEcoleController.text = cls.fraisEcole?.toString() ?? '';
+        _ecolageController.text = cls.ecolage?.toString() ?? '';
         _fraisCotisationParalleleController.text =
             cls.fraisCotisationParallele?.toString() ?? '';
+        _fraisInscriptionController.text =
+            cls.fraisInscription?.toString() ?? '';
         _selectedLevel = (cls.level?.trim().isNotEmpty ?? false)
             ? cls.level!.trim()
             : 'Primaire';
@@ -581,12 +593,15 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         academicYear: targetYear,
         level: _selectedLevel,
         titulaire: _titulaireController.text,
-        fraisEcole: _fraisEcoleController.text.isNotEmpty
-            ? double.tryParse(_fraisEcoleController.text)
+        ecolage: _ecolageController.text.isNotEmpty
+            ? double.tryParse(_ecolageController.text)
             : null,
         fraisCotisationParallele:
             _fraisCotisationParalleleController.text.isNotEmpty
             ? double.tryParse(_fraisCotisationParalleleController.text)
+            : null,
+        fraisInscription: _fraisInscriptionController.text.isNotEmpty
+            ? double.tryParse(_fraisInscriptionController.text)
             : null,
       );
       await _dbService.insertClass(newClass);
@@ -1063,9 +1078,10 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
           '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
       final safeTerm = term.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
       final safeClass = className.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
-      final fileName = 'PV_Deliberation_${safeClass}_${safeTerm}_$stamp.pdf';
+      final fileName = PdfService.sanitizeFileName('PV_Deliberation_${safeClass}_${safeTerm}_$stamp.pdf');
 
       final file = File('$directory/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(pdfBytes, flush: true);
 
       if (!mounted) return;
@@ -1684,7 +1700,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
           .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '');
       final safeId = student.id.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '');
       final safeTerm = term.replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
-      final fileName = 'Bulletin_${safeName}_${safeId}_${safeTerm}_$year.pdf';
+      final fileName = PdfService.sanitizeFileName('Bulletin_${safeName}_${safeId}_${safeTerm}_$year.pdf');
       archive.addFile(ArchiveFile(fileName, pdfBytes.length, pdfBytes));
     }
 
@@ -1706,9 +1722,11 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         : variant == 'custom'
         ? '_custom'
         : '';
-    final out = File(
-      '$directory/bulletins_archives_${safeClass}_${safeTerm}${suffix}_$stamp.zip',
+    final fileName = PdfService.sanitizeFileName(
+      'bulletins_archives_${safeClass}_${safeTerm}${suffix}_$stamp.zip',
     );
+    final out = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(out);
     await out.writeAsBytes(zipBytes, flush: true);
     if (!mounted) return;
     _showModernSnackBar('ZIP créé: ${out.path.split('/').last}');
@@ -1838,10 +1856,16 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
 
   Widget _buildModernFormCard(List<Widget> children) {
     final int nbEleves = _students.length;
-    final double fraisEcole = double.tryParse(_fraisEcoleController.text) ?? 0;
+    final double ecolageVal = double.tryParse(_ecolageController.text) ?? 0;
     final double fraisCotisation =
         double.tryParse(_fraisCotisationParalleleController.text) ?? 0;
-    final double totalClasse = nbEleves * (fraisEcole + fraisCotisation);
+    final double fraisInscriptionVal =
+        double.tryParse(_fraisInscriptionController.text) ?? 0;
+    final int nbNouveaux = _students
+        .where((s) => s.typeInscription == 'Nouvelle inscription')
+        .length;
+    final double totalClasse =
+        nbEleves * (ecolageVal + fraisCotisation) + (nbNouveaux * fraisInscriptionVal);
     // color for totals will be derived from the theme where needed; remove unused local variable
     children.add(
       Padding(
@@ -1945,9 +1969,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                           Padding(
                             padding: const EdgeInsets.only(bottom: 24),
                             child: CustomFormField(
-                              controller: _fraisEcoleController,
-                              labelText: "Frais d'école",
-                              hintText: "Montant des frais d'école",
+                              controller: _ecolageController,
+                              labelText: "Écolage",
+                              hintText: "Montant de l'écolage annuel",
                               validator: (value) {
                                 if (value != null &&
                                     value.isNotEmpty &&
@@ -3137,6 +3161,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
 
   Future<void> _printReceipt(Payment p, Student student) async {
     final pdf = pw.Document();
+    final fonts = await PdfService.loadPdfFonts();
     pdf.addPage(
       pw.Page(
         build: (pw.Context context) => pw.Padding(
@@ -3147,6 +3172,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
               pw.Text(
                 'REÇU DE PAIEMENT',
                 style: pw.TextStyle(
+                  font: fonts.bold,
                   fontSize: 22,
                   fontWeight: pw.FontWeight.bold,
                 ),
@@ -3154,24 +3180,25 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
               pw.SizedBox(height: 16),
               pw.Text(
                 'Élève : ${_displayStudentName(student)}',
-                style: pw.TextStyle(fontSize: 16),
+                style: pw.TextStyle(font: fonts.regular, fontSize: 16),
               ),
               pw.Text(
                 'Classe : ${student.className}',
-                style: pw.TextStyle(fontSize: 16),
+                style: pw.TextStyle(font: fonts.regular, fontSize: 16),
               ),
-              pw.Text('ID : ${student.id}', style: pw.TextStyle(fontSize: 14)),
+              pw.Text('ID : ${student.id}', style: pw.TextStyle(font: fonts.regular, fontSize: 14)),
               pw.SizedBox(height: 12),
               pw.Text(
                 'Montant payé : ${p.amount.toStringAsFixed(2)} FCFA',
                 style: pw.TextStyle(
+                  font: fonts.bold,
                   fontSize: 18,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
               pw.Text(
                 'Date : ${p.date.replaceFirst('T', ' ').substring(0, 16)}',
-                style: pw.TextStyle(fontSize: 14),
+                style: pw.TextStyle(font: fonts.regular, fontSize: 14),
               ),
               if (p.comment != null && p.comment!.isNotEmpty)
                 pw.Padding(
@@ -3179,6 +3206,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                   child: pw.Text(
                     'Commentaire : ${p.comment!}',
                     style: pw.TextStyle(
+                      font: fonts.regular,
                       fontSize: 14,
                       fontStyle: pw.FontStyle.italic,
                     ),
@@ -3190,6 +3218,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                   child: pw.Text(
                     'ANNULÉ le ${p.cancelledAt?.replaceFirst('T', ' ').substring(0, 16) ?? ''}',
                     style: pw.TextStyle(
+                      font: fonts.bold,
                       color: PdfColor.fromInt(0xFFFF0000),
                       fontWeight: pw.FontWeight.bold,
                     ),
@@ -3198,7 +3227,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
               pw.SizedBox(height: 24),
               pw.Text(
                 'Signature : ___________________________',
-                style: pw.TextStyle(fontSize: 14),
+                style: pw.TextStyle(font: fonts.regular, fontSize: 14),
               ),
             ],
           ),
@@ -4053,11 +4082,13 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                                                               ' ',
                                                               '_',
                                                             );
-                                                        final fileName =
-                                                            'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}.pdf';
+                                                        final fileName = PdfService.sanitizeFileName(
+                                                          'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}.pdf',
+                                                        );
                                                         final file = File(
                                                           '$directoryPath/$fileName',
                                                         );
+                                                        await PdfService.ensureParentDirectory(file);
                                                         await file.writeAsBytes(
                                                           pdfBytes,
                                                           flush: true,
@@ -4111,11 +4142,13 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                                                               ' ',
                                                               '_',
                                                             );
-                                                        final fileName =
-                                                            'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}_compact.pdf';
+                                                        final fileName = PdfService.sanitizeFileName(
+                                                          'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}_compact.pdf',
+                                                        );
                                                         final file = File(
                                                           '$directoryPath/$fileName',
                                                         );
+                                                        await PdfService.ensureParentDirectory(file);
                                                         await file.writeAsBytes(
                                                           pdfBytes,
                                                           flush: true,
@@ -4169,11 +4202,13 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                                                               ' ',
                                                               '_',
                                                             );
-                                                        final fileName =
-                                                            'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}_ultra_compact.pdf';
+                                                        final fileName = PdfService.sanitizeFileName(
+                                                          'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}_ultra_compact.pdf',
+                                                        );
                                                         final file = File(
                                                           '$directoryPath/$fileName',
                                                         );
+                                                        await PdfService.ensureParentDirectory(file);
                                                         await file.writeAsBytes(
                                                           pdfBytes,
                                                           flush: true,
@@ -4348,11 +4383,13 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                                                               ' ',
                                                               '_',
                                                             );
-                                                        final fileName =
-                                                            'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}_custom.pdf';
+                                                        final fileName = PdfService.sanitizeFileName(
+                                                          'Bulletin_${safeName}_${selectedTerm}_${rc['academicYear'] ?? ''}_custom.pdf',
+                                                        );
                                                         final file = File(
                                                           '$directoryPath/$fileName',
                                                         );
+                                                        await PdfService.ensureParentDirectory(file);
                                                         await file.writeAsBytes(
                                                           pdfBytes,
                                                           flush: true,
@@ -5027,7 +5064,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
 
       final workbook = xls.Workbook();
       final sheet = workbook.worksheets[0];
-      sheet.name = 'Matiere_${subjectName.replaceAll(' ', '_')}';
+      sheet.name = 'Matiere_${PdfService.sanitizeForPdf(subjectName).replaceAll(' ', '_')}';
 
       final headerStyle = workbook.styles.add('headerSubjectStyle');
       headerStyle.bold = true;
@@ -5111,7 +5148,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         sheet.getRangeByIndex(row, matriculeCol).setText(s.matricule ?? '');
         sheet
             .getRangeByIndex(row, nameCol)
-            .setText('${s.lastName} ${s.firstName}'.trim());
+            .setText(PdfService.sanitizeForPdf('${s.lastName} ${s.firstName}'.trim()));
         sheet.getRangeByIndex(row, classCol).setText(_nameController.text);
         sheet.getRangeByIndex(row, yearCol).setText(_yearController.text);
         sheet.getRangeByIndex(row, periodCol).setText(selectedTerm);
@@ -5210,10 +5247,13 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final now = DateTime.now();
       final formattedDate =
           '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-      final safeSubject = subjectName.replaceAll(' ', '_');
-      final fileName =
-          'modele_notes_${_nameController.text}_${safeSubject}_${_yearController.text}_${selectedTerm.replaceAll(' ', '_')}_$formattedDate.xlsx';
+      final safeSubject = PdfService.sanitizeForPdf(subjectName).replaceAll(' ', '_');
+      final safeClassName = _nameController.text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final safeYear = _yearController.text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final fileName = PdfService.sanitizeFileName(
+          'modele_notes_${safeClassName}_${safeSubject}_${safeYear}_${selectedTerm.replaceAll(' ', '_')}_$formattedDate.xlsx');
       final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes, flush: true);
 
       await OpenFile.open(file.path);
@@ -5242,6 +5282,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
   ) async {
     try {
       final pdf = pw.Document();
+      final fonts = await PdfService.loadPdfFonts();
       final title = 'RELEVE DE NOTES DE CLASSE';
       final className = _nameController.text;
       final year = _yearController.text;
@@ -5317,6 +5358,9 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final pw.PageTheme _pageTheme = pw.PageTheme(
         pageFormat: _pageFormat,
         margin: const pw.EdgeInsets.all(24),
+        theme: pw.ThemeData(
+          defaultTextStyle: pw.TextStyle(font: fonts.regular, fontSize: 10),
+        ),
         buildBackground:
             (schoolInfo != null &&
                 schoolInfo.logoPath != null &&
@@ -5339,10 +5383,10 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final studentsSorted = _sortedStudentsForExport();
 
       pw.Widget buildHeader() {
-        final left = (schoolInfo?.ministry ?? '').trim();
-        final rightTop = (schoolInfo?.republic ?? '').trim();
-        final rightBottom = (schoolInfo?.republicMotto ?? '').trim();
-        final schoolName = (schoolInfo?.name ?? '').trim().toUpperCase();
+        final left = PdfService.sanitizeForPdf((schoolInfo?.ministry ?? '').trim());
+        final rightTop = PdfService.sanitizeForPdf((schoolInfo?.republic ?? '').trim());
+        final rightBottom = PdfService.sanitizeForPdf((schoolInfo?.republicMotto ?? '').trim());
+        final schoolName = PdfService.sanitizeForPdf((schoolInfo?.name ?? '').trim().toUpperCase());
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
@@ -5356,17 +5400,17 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                       if (left.isNotEmpty)
                         pw.Text(
                           left.toUpperCase(),
-                          style: pw.TextStyle(fontSize: 8),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                         ),
                       if ((schoolInfo?.educationDirection ?? '').isNotEmpty)
                         pw.Text(
-                          (schoolInfo?.educationDirection ?? '').toUpperCase(),
-                          style: const pw.TextStyle(fontSize: 8),
+                          PdfService.sanitizeForPdf((schoolInfo?.educationDirection ?? '').toUpperCase()),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                         ),
                       if ((schoolInfo?.inspection ?? '').isNotEmpty)
                         pw.Text(
-                          (schoolInfo?.inspection ?? '').toUpperCase(),
-                          style: const pw.TextStyle(fontSize: 8),
+                          PdfService.sanitizeForPdf((schoolInfo?.inspection ?? '').toUpperCase()),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                         ),
                     ],
                   ),
@@ -5379,12 +5423,13 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                       if (rightTop.isNotEmpty)
                         pw.Text(
                           rightTop.toUpperCase(),
-                          style: const pw.TextStyle(fontSize: 8),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                         ),
                       if (rightBottom.isNotEmpty)
                         pw.Text(
                           rightBottom.toUpperCase(),
                           style: pw.TextStyle(
+                            font: fonts.regular,
                             fontSize: 8,
                             fontStyle: pw.FontStyle.italic,
                           ),
@@ -5417,6 +5462,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                 style: pw.TextStyle(
                   fontSize: 14,
                   fontWeight: pw.FontWeight.bold,
+                  font: fonts.bold,
                 ),
               ),
             ),
@@ -5424,6 +5470,20 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
             pw.Divider(color: PdfColors.blueGrey300),
           ],
         );
+      }
+
+      // Fetch grades for the subject and term
+      final allGrades = await _dbService.getAllGradesForPeriod(
+        className: className,
+        academicYear: year,
+        term: selectedTerm,
+      );
+      final subjectGrades = allGrades.where((g) => g.subject == subjectName).toList();
+
+      // Group grades by student and type
+      final Map<String, List<Grade>> gradesByStudent = {};
+      for (final grade in subjectGrades) {
+        gradesByStudent.putIfAbsent(grade.studentId, () => []).add(grade);
       }
 
       pdf.addPage(
@@ -5441,6 +5501,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                   style: pw.TextStyle(
                     fontSize: 13,
                     fontWeight: pw.FontWeight.bold,
+                    font: fonts.bold,
                   ),
                 ),
                 pw.SizedBox(height: 6),
@@ -5453,7 +5514,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                     pw.SizedBox(width: 8),
                     pw.Expanded(
                       child: pw.Text(
-                        'Matière: $subjectName\nProfesseur: $teacherName',
+                        'Matière: ${PdfService.sanitizeForPdf(subjectName)}\nProfesseur: ${PdfService.sanitizeForPdf(teacherName)}',
                         textAlign: pw.TextAlign.right,
                       ),
                     ),
@@ -5482,65 +5543,106 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                 children: [
                   pw.Text(
                     'Généré le: ' + _footerDate,
-                    style: const pw.TextStyle(fontSize: 8),
+                    style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                   ),
                   pw.Text(
                     'Page ${context.pageNumber}/${context.pagesCount}',
-                    style: const pw.TextStyle(fontSize: 8),
+                    style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                   ),
                 ],
               ),
             ],
           ),
           build: (context) {
-            // Entêtes: N°, Matricule, Nom et Prénom(s), Sexe, Statut, (3 colonnes sans texte pour notes de classe),
-            // Moyenne de classe, Note composition, puis colonnes dynamiques et Observations en dernière colonne
+            // Entêtes: N°, Matricule, Nom et Prénom(s), Sexe, Statut, Notes de classe, Moyenne de classe, Note composition, Observations
             final headers = <String>[
-              '', // N°
-              '', // Matricule
-              '', // Nom et Prénom(s)
-              '', // Sexe
-              '', // Statut
-              '', // Notes de classe (col 1)
-              '', // Notes de classe (col 2)
-              '', // Notes de classe (col 3)
-              '', // Moyenne Classe
-              '', // Note Composition
+              'N°',
+              'Matricule',
+              'Nom et Prénom(s)',
+              'Sexe',
+              'Statut',
+              'Notes de classe',
+              'Moyenne Classe',
+              'Note Composition',
+              'Observations',
             ];
-            // (Colonnes Devoir/Composition supprimées à la demande)
-            headers.add(''); // Observations
             final rows = <List<String>>[];
+
             for (int i = 0; i < studentsSorted.length; i++) {
               final s = studentsSorted[i];
+              final studentGrades = gradesByStudent[s.id] ?? [];
+
+              // Separate grades by type
+              final classworkGrades = studentGrades.where((g) => (g.type?.toLowerCase().contains('devoir') ?? false) || (g.type?.toLowerCase().contains('classe') ?? false)).toList();
+              final examGrades = studentGrades.where((g) => (g.type?.toLowerCase().contains('composition') ?? false) || (g.type?.toLowerCase().contains('exam') ?? false)).toList();
+
+              // Calculate averages
+              double classworkAvg = 0.0;
+              if (classworkGrades.isNotEmpty) {
+                double total = 0.0;
+                double totalCoeff = 0.0;
+                for (final g in classworkGrades) {
+                  if (g.maxValue > 0) {
+                    total += ((g.value ?? 0) / g.maxValue) * 20 * g.coefficient;
+                    totalCoeff += g.coefficient;
+                  }
+                }
+                classworkAvg = totalCoeff > 0 ? total / totalCoeff : 0.0;
+              }
+
+              double examAvg = 0.0;
+              if (examGrades.isNotEmpty) {
+                double total = 0.0;
+                double totalCoeff = 0.0;
+                for (final g in examGrades) {
+                  if (g.maxValue > 0) {
+                    total += ((g.value ?? 0) / g.maxValue) * 20 * g.coefficient;
+                    totalCoeff += g.coefficient;
+                  }
+                }
+                examAvg = totalCoeff > 0 ? total / totalCoeff : 0.0;
+              }
+
+              // Calculate overall average for the subject
+              double overallAvg = 0.0;
+              if (studentGrades.isNotEmpty) {
+                double total = 0.0;
+                double totalCoeff = 0.0;
+                for (final g in studentGrades) {
+                  if (g.maxValue > 0) {
+                    total += (g.value / g.maxValue) * 20 * g.coefficient;
+                    totalCoeff += g.coefficient;
+                  }
+                }
+                overallAvg = totalCoeff > 0 ? total / totalCoeff : 0.0;
+              }
+
               final row = <String>[
                 (i + 1).toString(),
                 (s.matricule ?? ''),
-                '${s.lastName} ${s.firstName}'.trim(),
+                PdfService.sanitizeForPdf('${s.lastName} ${s.firstName}'.trim()),
                 s.gender,
                 s.status,
-                '', // Note Classe 1
-                '', // Note Classe 2
-                '', // Note Classe 3
-                '', // Moyenne Classe
-                '', // Note Composition
+                classworkGrades.isNotEmpty ? classworkGrades.take(3).map((g) => (g.value ?? 0).toStringAsFixed(1)).join('\n') : '', // Notes de classe
+                overallAvg > 0 ? overallAvg.toStringAsFixed(2) : '', // Moyenne Classe
+                examAvg > 0 ? examAvg.toStringAsFixed(2) : '', // Note Composition
+                '', // Observations
               ];
-              // (Pas de colonnes Devoir/Composition)
-              row.add(''); // Observations (à compléter) en dernière colonne
               rows.add(row);
             }
 
-            // Définir des largeurs flexibles pour aligner un label au-dessus des 3 colonnes de notes de classe
-            final List<int> columnFlex = []
-              ..addAll([
-                6,
-                9,
-                28,
-                8,
-                10,
-              ]) // N°, Matricule, Nom (élargi), Sexe, Statut
-              ..addAll([9, 9, 9]) // 3 colonnes de notes de classe
-              ..addAll([10, 10]) // Moyenne classe, Note composition
-              ..add(16); // Observations
+            // Définir des largeurs flexibles
+            final List<int> columnFlex = [
+              6,  // N°
+              9,  // Matricule
+              28, // Nom et Prénom(s)
+              8,  // Sexe
+              10, // Statut
+              20, // Notes de classe
+              12, // Moyenne Classe
+              12, // Note Composition
+              16, // Observations
+            ];
 
             final columnWidths = <int, pw.TableColumnWidth>{
               for (int i = 0; i < headers.length; i++)
@@ -5548,85 +5650,8 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
             };
             const headerBg = PdfColors.blue100;
             const headerBorder = PdfColors.blue200;
-            pw.Widget _topHeaderCell(
-              String text, {
-              bool isFirst = false,
-              bool isLast = false,
-              bool isGroup = false,
-            }) {
-              return pw.Container(
-                height: 22,
-                padding: const pw.EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 3,
-                ),
-                decoration: pw.BoxDecoration(
-                  color: headerBg,
-                  border: pw.Border.all(color: headerBorder, width: 0.8),
-                  borderRadius: pw.BorderRadius.only(
-                    topLeft: isFirst
-                        ? const pw.Radius.circular(6)
-                        : pw.Radius.zero,
-                    topRight: isLast
-                        ? const pw.Radius.circular(6)
-                        : pw.Radius.zero,
-                  ),
-                ),
-                alignment: pw.Alignment.center,
-                child: pw.Text(
-                  text,
-                  textAlign: pw.TextAlign.center,
-                  maxLines: 2,
-                  style: pw.TextStyle(
-                    fontSize: 8,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-              );
-            }
 
-            final int groupFlex = columnFlex[5] + columnFlex[6] + columnFlex[7];
             return [
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    flex: columnFlex[0],
-                    child: _topHeaderCell('N°', isFirst: true),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[1],
-                    child: _topHeaderCell('Matricule'),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[2],
-                    child: _topHeaderCell('Nom et Prénom(s)'),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[3],
-                    child: _topHeaderCell('Sexe'),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[4],
-                    child: _topHeaderCell('Statut'),
-                  ),
-                  pw.Expanded(
-                    flex: groupFlex,
-                    child: _topHeaderCell('Notes de classe', isGroup: true),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[8],
-                    child: _topHeaderCell('Moyenne Classe'),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[9],
-                    child: _topHeaderCell('Note Composition'),
-                  ),
-                  pw.Expanded(
-                    flex: columnFlex[10],
-                    child: _topHeaderCell('Observations', isLast: true),
-                  ),
-                ],
-              ),
               pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.blue100),
                 columnWidths: columnWidths,
@@ -5646,6 +5671,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                             style: pw.TextStyle(
                               fontWeight: pw.FontWeight.bold,
                               fontSize: 8,
+                              font: fonts.bold,
                             ),
                           ),
                         ),
@@ -5663,7 +5689,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                             alignment: pw.Alignment.centerLeft,
                             child: pw.Text(
                               c,
-                              style: const pw.TextStyle(fontSize: 8),
+                              style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                             ),
                           ),
                       ],
@@ -5707,6 +5733,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
                         pw.Text(
                           directorDisplayName,
                           style: pw.TextStyle(
+                            font: fonts.bold,
                             fontSize: 9,
                             fontWeight: pw.FontWeight.bold,
                           ),
@@ -5736,10 +5763,14 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final now = DateTime.now();
       final formattedDate =
           '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-      final safeSubject = subjectName.replaceAll(' ', '_');
-      final fileName =
-          'modele_notes_${_nameController.text}_${safeSubject}_${_yearController.text}_$formattedDate.pdf';
+      final safeSubject = PdfService.sanitizeForPdf(subjectName)
+          .replaceAll(RegExp(r"[^A-Za-z0-9_\-]"), '_');
+      final safeClassName = _nameController.text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final safeYear = _yearController.text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final fileName = PdfService.sanitizeFileName(
+          'modele_notes_${safeClassName}_${safeSubject}_${safeYear}_$formattedDate.pdf');
       final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(await pdf.save());
       await OpenFile.open(file.path);
 
@@ -6059,10 +6090,14 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final now = DateTime.now();
       final formattedDate =
           '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-      final fileName =
-          'liste_eleves_${widget.classe.name}_${formattedDate}.pdf';
+      final safeClassName = widget.classe.name.replaceAll(
+        RegExp(r'[\\/:*?"<>|]'),
+        '_',
+      );
+      final fileName = PdfService.sanitizeFileName('liste_eleves_${safeClassName}_${formattedDate}.pdf');
       final file = File('$dirPath/$fileName');
 
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(pdfBytes);
 
       // Ouvrir automatiquement le fichier
@@ -6296,10 +6331,14 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final now = DateTime.now();
       final formattedDate =
           '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-      final fileName =
-          'liste_eleves_${widget.classe.name}_${formattedDate}.xlsx';
+      final safeClassName = widget.classe.name.replaceAll(
+        RegExp(r'[\\/:*?"<>|]'),
+        '_',
+      );
+      final fileName = PdfService.sanitizeFileName('liste_eleves_${safeClassName}_${formattedDate}.xlsx');
       final file = File('$dirPath/$fileName');
 
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes);
 
       // Ouvrir automatiquement le fichier
@@ -6349,9 +6388,14 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final now = DateTime.now();
       final formattedDate =
           '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-      final fileName = 'liste_eleves_${widget.classe.name}_$formattedDate.docx';
+      final safeClassName = widget.classe.name.replaceAll(
+        RegExp(r'[\\/:*?"<>|]'),
+        '_',
+      );
+      final fileName = PdfService.sanitizeFileName('liste_eleves_${safeClassName}_$formattedDate.docx');
       final file = File('$dirPath/$fileName');
 
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(docx);
 
       // Ouvrir automatiquement le fichier
@@ -6404,10 +6448,11 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         );
 
         // Nom de fichier avec le nom de l'élève
-        final fileName =
-            'fiche_profil_${'${student.firstName}_${student.lastName}'.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        final fileName = PdfService.sanitizeFileName(
+            'fiche_profil_${'${student.firstName}_${student.lastName}'.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf');
         final file = File('$dirPath/$fileName');
 
+        await PdfService.ensureParentDirectory(file);
         await file.writeAsBytes(pdfBytes);
       }
 
@@ -6583,7 +6628,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       // Devoir/Composition + Coeff + Sur + Prof + App + MoyClasse
       final List<_SubjectColumnMeta> subjectColumns = [];
       for (final subject in classSubjects) {
-        final subjectName = subject.name;
+        final subjectName = PdfService.sanitizeForPdf(subject.name);
         final devoirCol = col++;
         setHeader(devoirCol, 'Devoir [$subjectName]');
         final coeffDevCol = col++;
@@ -6634,7 +6679,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         final row = i + 2; // 1 = header
         final s = studentsSorted[i];
         sheet.getRangeByIndex(row, 1).setText(s.id);
-        sheet.getRangeByIndex(row, 2).setText(s.name);
+        sheet.getRangeByIndex(row, 2).setText(PdfService.sanitizeForPdf(s.name));
         sheet.getRangeByIndex(row, 3).setText(_nameController.text);
         sheet.getRangeByIndex(row, 4).setText(_yearController.text);
         sheet.getRangeByIndex(row, 5).setText('Trimestre 1');
@@ -6808,9 +6853,12 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
       final now = DateTime.now();
       final formattedDate =
           '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-      final fileName =
-          'modele_notes_${_nameController.text}_${_yearController.text}_$formattedDate.xlsx';
+      final safeClassName = _nameController.text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final safeYear = _yearController.text.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final fileName = PdfService.sanitizeFileName(
+          'modele_notes_${safeClassName}_${safeYear}_$formattedDate.xlsx');
       final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
 
       await file.writeAsBytes(bytes, flush: true);
 

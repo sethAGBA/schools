@@ -2083,9 +2083,9 @@ class _StudentProfilePageState extends State<StudentProfilePage>
     final dir = await FilePicker.platform.getDirectoryPath();
     if (dir == null) return;
     final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final file = File(
-      '$dir/discipline_${_student.name.replaceAll(' ', '_')}_$ts.csv',
-    );
+    final safeName = PdfService.sanitizeFileName(_student.name);
+    final file = File('$dir/discipline_${safeName}_$ts.csv');
+    await PdfService.ensureParentDirectory(file);
 
     final rows = <List<dynamic>>[
       ['kind', 'date', 'type', 'minutes', 'justified', 'description', 'reason'],

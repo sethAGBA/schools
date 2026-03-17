@@ -73,6 +73,7 @@ class _StudentRegistrationFormState extends State<StudentRegistrationForm> {
 
   String? _selectedClass;
   String? _selectedGender;
+  String _selectedTypeInscription = 'Réinscription';
   final TextEditingController _statusController = TextEditingController(
     text: 'Nouveau',
   );
@@ -119,6 +120,7 @@ class _StudentRegistrationFormState extends State<StudentRegistrationForm> {
       _medicalInfoController.text = s.medicalInfo ?? '';
       // statut libre saisi par l'utilisateur
       _statusController.text = (s.status.isNotEmpty) ? s.status : 'Nouveau';
+      _selectedTypeInscription = s.typeInscription;
       if (s.photoPath != null && File(s.photoPath!).existsSync()) {
         _studentPhoto = File(s.photoPath!);
       }
@@ -127,9 +129,11 @@ class _StudentRegistrationFormState extends State<StudentRegistrationForm> {
       _selectedClass = widget.className;
       _studentIdController.text = const Uuid().v4();
       _matriculeController.text = _generateMatricule();
+      _selectedTypeInscription = 'Nouvelle inscription';
     } else {
       _studentIdController.text = const Uuid().v4();
       _matriculeController.text = _generateMatricule();
+      _selectedTypeInscription = 'Nouvelle inscription';
     }
     // Pré-remplir les champs année scolaire et date d'inscription pour une nouvelle fiche
     getCurrentAcademicYear().then((year) {
@@ -455,6 +459,7 @@ class _StudentRegistrationFormState extends State<StudentRegistrationForm> {
         status: _statusController.text.trim().isEmpty
             ? 'Nouveau'
             : _statusController.text.trim(),
+        typeInscription: _selectedTypeInscription,
         medicalInfo: _medicalInfoController.text.isEmpty
             ? null
             : _medicalInfoController.text,
@@ -653,6 +658,19 @@ class _StudentRegistrationFormState extends State<StudentRegistrationForm> {
               validator: (value) => (value == null || value.trim().isEmpty)
                   ? 'Veuillez saisir le statut de l\'élève'
                   : null,
+            ),
+            const SizedBox(height: AppSizes.smallSpacing),
+            // Type d'inscription — détermine l'application des frais d'inscription
+            CustomFormField(
+              isDropdown: true,
+              labelText: 'Type d\'inscription',
+              hintText: 'Sélectionnez le type',
+              dropdownItems: const ['Nouvelle inscription', 'Réinscription'],
+              dropdownValue: _selectedTypeInscription,
+              onDropdownChanged: (value) =>
+                  setState(() => _selectedTypeInscription = value ?? 'Réinscription'),
+              validator: (value) =>
+                  (value == null || value.isEmpty) ? 'Requis' : null,
             ),
             const SizedBox(height: AppSizes.spacing),
             _buildSectionTitle('Informations Médicales'),

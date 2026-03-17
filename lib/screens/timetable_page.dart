@@ -14,7 +14,7 @@ import 'package:school_manager/services/scheduling_service.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/utils/academic_year.dart';
 import 'package:school_manager/utils/timetable_prefs.dart' as ttp;
-import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
+// import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'dart:io';
 import 'package:open_file/open_file.dart';
@@ -93,27 +93,44 @@ class _TimetablePageState extends State<TimetablePage>
   final TextEditingController _morningEndCtrl = TextEditingController();
   final TextEditingController _afternoonStartCtrl = TextEditingController();
   final TextEditingController _afternoonEndCtrl = TextEditingController();
-  final TextEditingController _sessionMinutesCtrl = TextEditingController(text: '60');
-  final TextEditingController _sessionsPerSubjectCtrl = TextEditingController(text: '1');
-  final TextEditingController _teacherMaxPerDayCtrl = TextEditingController(text: '0');
-  final TextEditingController _classMaxPerDayCtrl = TextEditingController(text: '0');
-  final TextEditingController _subjectMaxPerDayCtrl = TextEditingController(text: '0');
-  final TextEditingController _optionalMaxMinutesCtrl = TextEditingController(text: '120');
+  final TextEditingController _sessionMinutesCtrl = TextEditingController(
+    text: '60',
+  );
+  final TextEditingController _sessionsPerSubjectCtrl = TextEditingController(
+    text: '1',
+  );
+  final TextEditingController _teacherMaxPerDayCtrl = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _classMaxPerDayCtrl = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _subjectMaxPerDayCtrl = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _optionalMaxMinutesCtrl = TextEditingController(
+    text: '120',
+  );
   bool _clearBeforeGen = false;
   bool _isGenerating = false;
   bool _saturateAll = false;
   bool _capTwoHourBlocksWeekly = true;
   Set<String> _excludedFromTwoHourCap = <String>{};
   // Affichage
-  bool _showSummaries = false; // résumés masqués par défaut pour maximiser l'espace
-  bool _showClassList = true;  // panneau de classes visible par défaut
-  bool _fullscreen = false;    // plein écran désactivé par défaut
-  double _gridZoom = 1.0;      // zoom de la grille (1.0 = 100%)
+  bool _showSummaries =
+      false; // résumés masqués par défaut pour maximiser l'espace
+  bool _showClassList = true; // panneau de classes visible par défaut
+  bool _fullscreen = false; // plein écran désactivé par défaut
+  double _gridZoom = 1.0; // zoom de la grille (1.0 = 100%)
   double _leftPanelWidth = 200.0; // largeur panneau classes
-  bool _tourSeen = false;      // tour guidé déjà vu ?
+  bool _tourSeen = false; // tour guidé déjà vu ?
   // Block sizing settings
-  final TextEditingController _blockDefaultCtrl = TextEditingController(text: '2');
-  final TextEditingController _threeHourThresholdCtrl = TextEditingController(text: '1.5');
+  final TextEditingController _blockDefaultCtrl = TextEditingController(
+    text: '2',
+  );
+  final TextEditingController _threeHourThresholdCtrl = TextEditingController(
+    text: '1.5',
+  );
 
   final DatabaseService _dbService = DatabaseService();
   late final SchedulingService _scheduling;
@@ -130,7 +147,6 @@ class _TimetablePageState extends State<TimetablePage>
   final GlobalKey _gridAreaKey = GlobalKey();
   final GlobalKey _paletteKey = GlobalKey();
   final GlobalKey _tabBarKey = GlobalKey();
-
 
   @override
   void initState() {
@@ -219,8 +235,10 @@ class _TimetablePageState extends State<TimetablePage>
     _afternoonEndCtrl.text = await ttp.loadAfternoonEnd();
     _sessionMinutesCtrl.text = (await ttp.loadSessionMinutes()).toString();
     _blockDefaultCtrl.text = (await ttp.loadBlockDefaultSlots()).toString();
-    _threeHourThresholdCtrl.text = (await ttp.loadThreeHourThreshold()).toString();
-    _optionalMaxMinutesCtrl.text = (await ttp.loadOptionalMaxMinutes()).toString();
+    _threeHourThresholdCtrl.text = (await ttp.loadThreeHourThreshold())
+        .toString();
+    _optionalMaxMinutesCtrl.text = (await ttp.loadOptionalMaxMinutes())
+        .toString();
     _capTwoHourBlocksWeekly = await ttp.loadCapTwoHourBlocksWeekly();
     _excludedFromTwoHourCap = await ttp.loadTwoHourCapExcludedSubjects();
     // UI prefs
@@ -259,15 +277,14 @@ class _TimetablePageState extends State<TimetablePage>
     if (!_isClassView &&
         _selectedTeacherFilter != null &&
         _selectedTeacherFilter!.isNotEmpty) {
-      await _loadTeacherUnavailability(
-        _selectedTeacherFilter!,
-        effectiveYear,
-      );
+      await _loadTeacherUnavailability(_selectedTeacherFilter!, effectiveYear);
     }
 
     // Démarrer le tour guidé si première fois
     if (!_tourSeen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _startTimetableTour());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _startTimetableTour(),
+      );
     }
   }
 
@@ -352,7 +369,9 @@ class _TimetablePageState extends State<TimetablePage>
           ? FloatingActionButton.small(
               tooltip: _fullscreen ? 'Quitter le plein écran' : 'Plein écran',
               onPressed: () => setState(() => _fullscreen = !_fullscreen),
-              child: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+              child: Icon(
+                _fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              ),
             )
           : null,
       body: Column(
@@ -393,8 +412,14 @@ class _TimetablePageState extends State<TimetablePage>
                 dividerColor: Colors.transparent,
                 labelColor: Colors.white,
                 unselectedLabelColor: theme.textTheme.bodyMedium?.color,
-                labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                ),
                 tabs: const [
                   Tab(text: 'Paramètres'),
                   Tab(text: 'Emploi du temps'),
@@ -421,294 +446,432 @@ class _TimetablePageState extends State<TimetablePage>
                     if (k == LogicalKeyboardKey.equal ||
                         k == LogicalKeyboardKey.add ||
                         k == LogicalKeyboardKey.numpadAdd) {
-                      setState(() { _gridZoom = (_gridZoom + 0.1).clamp(0.6, 2.0); });
+                      setState(() {
+                        _gridZoom = (_gridZoom + 0.1).clamp(0.6, 2.0);
+                      });
                       ttp.saveGridZoom(_gridZoom);
                     } else if (k == LogicalKeyboardKey.minus ||
                         k == LogicalKeyboardKey.numpadSubtract) {
-                      setState(() { _gridZoom = (_gridZoom - 0.1).clamp(0.6, 2.0); });
+                      setState(() {
+                        _gridZoom = (_gridZoom - 0.1).clamp(0.6, 2.0);
+                      });
                       ttp.saveGridZoom(_gridZoom);
                     } else if (k == LogicalKeyboardKey.keyF) {
-                      setState(() { _fullscreen = !_fullscreen; });
+                      setState(() {
+                        _fullscreen = !_fullscreen;
+                      });
                     } else if (k == LogicalKeyboardKey.digit0) {
-                      setState(() { _gridZoom = 1.0; _showClassList = true; _showSummaries = false; });
+                      setState(() {
+                        _gridZoom = 1.0;
+                        _showClassList = true;
+                        _showSummaries = false;
+                      });
                       ttp.saveGridZoom(_gridZoom);
                       ttp.saveShowClassList(_showClassList);
                       ttp.saveShowSummaries(_showSummaries);
                     }
                   },
                   child: Column(
-                  children: [
-                    if (!_fullscreen)
-                      Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        children: [
-                          Container(
-                            key: _filtersBarKey,
-                            child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_fullscreen)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
                             children: [
-                              Tooltip(
-                                message: 'Basculer entre la vue Classe et la vue Enseignant',
-                                child: ToggleButtons(
-                                  isSelected: [_isClassView, !_isClassView],
-                                  onPressed: (index) {
-                                    setState(() {
-                                      _isClassView = index == 0;
-                                    });
-                                  },
+                              Container(
+                                key: _filtersBarKey,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                      child: Text('Classe', style: theme.textTheme.bodyMedium),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                      child: Text('Enseignant', style: theme.textTheme.bodyMedium),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              if (_isClassView)
-                                Expanded(
-                                  child: Tooltip(
-                                    message: 'Filtrer la grille par classe',
-                                    child: DropdownButtonFormField<String>(
-                                      value: _selectedClassKey,
-                                      decoration: InputDecoration(
-                                        labelText: 'Filtrer par Classe',
-                                        labelStyle: theme.textTheme.bodyMedium,
-                                        border: const OutlineInputBorder(),
-                                      ),
-                                      isDense: true,
-                                      isExpanded: true,
-                                      items: _classes
-                                          .map((cls) => DropdownMenuItem<String>(
-                                                value: _classKey(cls),
-                                                child: Text(_classLabel(cls), style: theme.textTheme.bodyMedium),
-                                              ))
-                                          .toList(),
-                                      onChanged: (v) => _onSelectClassKey(v),
-                                    ),
-                                  ),
-                                )
-                              else
-                                Expanded(
-                                  child: Tooltip(
-                                    message: 'Filtrer la grille par enseignant',
-                                    child: DropdownButtonFormField<String>(
-                                      value: _selectedTeacherFilter,
-                                      decoration: InputDecoration(
-                                        labelText: 'Filtrer par Enseignant',
-                                        labelStyle: theme.textTheme.bodyMedium,
-                                        border: const OutlineInputBorder(),
-                                      ),
-                                      isDense: true,
-                                      isExpanded: true,
-                                      items: _teachers
-                                          .map((t) => DropdownMenuItem<String>(
-                                                value: t.name,
-                                                child: Text(t.name, style: theme.textTheme.bodyMedium),
-                                              ))
-                                          .toList(),
-                                      onChanged: (v) async {
-                                        setState(() => _selectedTeacherFilter = v);
-                                        if (v != null && v.isNotEmpty) {
-                                          final year = await _effectiveAcademicYear();
-                                          await _loadTeacherUnavailability(v, year);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                ),
-                              const SizedBox(width: 16),
-                              Tooltip(
-                                message: 'Ajouter un cours à l\'emploi du temps',
-                                child: ElevatedButton.icon(
-                                  onPressed: _showAddEditTimetableEntryDialog,
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('Ajouter un cours'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryBlue,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              if (!_isClassView)
-                                Tooltip(
-                                  message: 'Indisponibilités de l\'enseignant sélectionné',
-                                  child: ElevatedButton.icon(
-                                    onPressed: _showTeacherUnavailabilityDialog,
-                                    icon: const Icon(Icons.event_busy),
-                                    label: const Text('Indisponibilités'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF6D28D9),
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              Tooltip(
-                                message: 'Exporter la vue actuelle (classe/enseignant) en PDF',
-                                child: ElevatedButton.icon(
-                                  onPressed: () => _exportTimetableToPdf(exportBy: _isClassView ? 'class' : 'teacher'),
-                                  icon: const Icon(Icons.picture_as_pdf),
-                                  label: const Text('Exporter PDF'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Tooltip(
-                                message: 'Exporter la vue actuelle (classe/enseignant) en Excel',
-                                child: ElevatedButton.icon(
-                                  onPressed: () => _exportTimetableToExcel(exportBy: _isClassView ? 'class' : 'teacher'),
-                                  icon: const Icon(Icons.grid_on),
-                                  label: const Text('Exporter Excel'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(key: _viewControlsKey, child: _buildViewControls(context)),
-                                  if (!_tourSeen) ...[
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.secondary.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(999),
-                                        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.2)),
-                                      ),
-                                      child: Row(
-                                        children: const [
-                                          Icon(Icons.fiber_new, size: 14),
-                                          SizedBox(width: 4),
-                                          Text('Nouveau', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    Tooltip(
+                                      message:
+                                          'Basculer entre la vue Classe et la vue Enseignant',
+                                      child: ToggleButtons(
+                                        isSelected: [
+                                          _isClassView,
+                                          !_isClassView,
+                                        ],
+                                        onPressed: (index) {
+                                          setState(() {
+                                            _isClassView = index == 0;
+                                          });
+                                        },
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16.0,
+                                            ),
+                                            child: Text(
+                                              'Classe',
+                                              style: theme.textTheme.bodyMedium,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16.0,
+                                            ),
+                                            child: Text(
+                                              'Enseignant',
+                                              style: theme.textTheme.bodyMedium,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
+                                    const SizedBox(width: 16),
+                                    if (_isClassView)
+                                      Expanded(
+                                        child: Tooltip(
+                                          message:
+                                              'Filtrer la grille par classe',
+                                          child: DropdownButtonFormField<String>(
+                                            value: _selectedClassKey,
+                                            decoration: InputDecoration(
+                                              labelText: 'Filtrer par Classe',
+                                              labelStyle:
+                                                  theme.textTheme.bodyMedium,
+                                              border:
+                                                  const OutlineInputBorder(),
+                                            ),
+                                            isDense: true,
+                                            isExpanded: true,
+                                            items: _classes
+                                                .map(
+                                                  (cls) =>
+                                                      DropdownMenuItem<String>(
+                                                        value: _classKey(cls),
+                                                        child: Text(
+                                                          _classLabel(cls),
+                                                          style: theme
+                                                              .textTheme
+                                                              .bodyMedium,
+                                                        ),
+                                                      ),
+                                                )
+                                                .toList(),
+                                            onChanged: (v) =>
+                                                _onSelectClassKey(v),
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      Expanded(
+                                        child: Tooltip(
+                                          message:
+                                              'Filtrer la grille par enseignant',
+                                          child: DropdownButtonFormField<String>(
+                                            value: _selectedTeacherFilter,
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  'Filtrer par Enseignant',
+                                              labelStyle:
+                                                  theme.textTheme.bodyMedium,
+                                              border:
+                                                  const OutlineInputBorder(),
+                                            ),
+                                            isDense: true,
+                                            isExpanded: true,
+                                            items: _teachers
+                                                .map(
+                                                  (t) =>
+                                                      DropdownMenuItem<String>(
+                                                        value: t.name,
+                                                        child: Text(
+                                                          t.name,
+                                                          style: theme
+                                                              .textTheme
+                                                              .bodyMedium,
+                                                        ),
+                                                      ),
+                                                )
+                                                .toList(),
+                                            onChanged: (v) async {
+                                              setState(
+                                                () =>
+                                                    _selectedTeacherFilter = v,
+                                              );
+                                              if (v != null && v.isNotEmpty) {
+                                                final year =
+                                                    await _effectiveAcademicYear();
+                                                await _loadTeacherUnavailability(
+                                                  v,
+                                                  year,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(width: 16),
+                                    Tooltip(
+                                      message:
+                                          'Ajouter un cours à l\'emploi du temps',
+                                      child: ElevatedButton.icon(
+                                        onPressed:
+                                            _showAddEditTimetableEntryDialog,
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Ajouter un cours'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.primaryBlue,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                            vertical: 12,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (!_isClassView)
+                                      Tooltip(
+                                        message:
+                                            'Indisponibilités de l\'enseignant sélectionné',
+                                        child: ElevatedButton.icon(
+                                          onPressed:
+                                              _showTeacherUnavailabilityDialog,
+                                          icon: const Icon(Icons.event_busy),
+                                          label: const Text('Indisponibilités'),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(
+                                              0xFF6D28D9,
+                                            ),
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 12,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                   ],
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  Tooltip(
+                                    message:
+                                        'Exporter la vue actuelle (classe/enseignant) en PDF',
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _exportTimetableToPdf(
+                                        exportBy: _isClassView
+                                            ? 'class'
+                                            : 'teacher',
+                                      ),
+                                      icon: const Icon(Icons.picture_as_pdf),
+                                      label: const Text('Exporter PDF'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Tooltip(
+                                    message:
+                                        'Exporter la vue actuelle (classe/enseignant) en Excel',
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _exportTimetableToExcel(
+                                        exportBy: _isClassView
+                                            ? 'class'
+                                            : 'teacher',
+                                      ),
+                                      icon: const Icon(Icons.grid_on),
+                                      label: const Text('Exporter Excel'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 20,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        key: _viewControlsKey,
+                                        child: _buildViewControls(context),
+                                      ),
+                                      if (!_tourSeen) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .secondary
+                                                .withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                            border: Border.all(
+                                              color: Theme.of(
+                                                context,
+                                              ).dividerColor.withOpacity(0.2),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: const [
+                                              Icon(Icons.fiber_new, size: 14),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Nouveau',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ],
                               ),
+                              const SizedBox(height: 12),
+                              if (_isClassView && _showSummaries)
+                                _buildClassSubjectHoursSummary(context),
+                              if (_isClassView && _showSummaries)
+                                _buildClassTeacherHoursSummary(context),
+                              if (_isClassView && _showSummaries)
+                                _buildClassDayHoursSummary(context),
+                              if (!_isClassView && _showSummaries)
+                                _buildTeacherHoursSummary(context),
+                              if (!_isClassView && _showSummaries)
+                                _buildTeacherDayHoursSummary(context),
+                              if (_isClassView) _buildSubjectPalette(context),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          if (_isClassView && _showSummaries) _buildClassSubjectHoursSummary(context),
-                          if (_isClassView && _showSummaries) _buildClassTeacherHoursSummary(context),
-                          if (_isClassView && _showSummaries) _buildClassDayHoursSummary(context),
-                          if (!_isClassView && _showSummaries) _buildTeacherHoursSummary(context),
-                          if (!_isClassView && _showSummaries) _buildTeacherDayHoursSummary(context),
-                          if (_isClassView) _buildSubjectPalette(context),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Row(
-                            children: [
-                              if (_showClassList && !_fullscreen)
-                                SizedBox(
-                                  width: _leftPanelWidth,
-                                  child: Scrollbar(
-                                    controller: _classListScrollCtrl,
-                                    thumbVisibility: true,
-                                    child: ListView.builder(
+                        ),
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            Row(
+                              children: [
+                                if (_showClassList && !_fullscreen)
+                                  SizedBox(
+                                    width: _leftPanelWidth,
+                                    child: Scrollbar(
                                       controller: _classListScrollCtrl,
-                                      itemCount: _classes.length,
-                                      itemBuilder: (context, index) {
-                                        final aClass = _classes[index];
-                                        return ListTile(
-                                          title: Text(_classLabel(aClass), style: theme.textTheme.bodyMedium),
-                                          selected: _classKey(aClass) == _selectedClassKey,
-                                          onTap: () => _onSelectClassKey(_classKey(aClass)),
-                                        );
+                                      thumbVisibility: true,
+                                      child: ListView.builder(
+                                        controller: _classListScrollCtrl,
+                                        itemCount: _classes.length,
+                                        itemBuilder: (context, index) {
+                                          final aClass = _classes[index];
+                                          return ListTile(
+                                            title: Text(
+                                              _classLabel(aClass),
+                                              style: theme.textTheme.bodyMedium,
+                                            ),
+                                            selected:
+                                                _classKey(aClass) ==
+                                                _selectedClassKey,
+                                            onTap: () => _onSelectClassKey(
+                                              _classKey(aClass),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                if (_showClassList && !_fullscreen)
+                                  MouseRegion(
+                                    cursor: SystemMouseCursors.resizeColumn,
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.translucent,
+                                      onHorizontalDragUpdate: (details) {
+                                        setState(() {
+                                          _leftPanelWidth =
+                                              (_leftPanelWidth +
+                                                      details.delta.dx)
+                                                  .clamp(120.0, 420.0);
+                                        });
+                                        ttp.saveLeftPanelWidth(_leftPanelWidth);
                                       },
+                                      child: Container(
+                                        width: 6,
+                                        height: double.infinity,
+                                        color: theme.dividerColor.withOpacity(
+                                          0.3,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              if (_showClassList && !_fullscreen)
-                                MouseRegion(
-                                  cursor: SystemMouseCursors.resizeColumn,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.translucent,
-                                    onHorizontalDragUpdate: (details) {
-                                      setState(() {
-                                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(120.0, 420.0);
-                                      });
-                                      ttp.saveLeftPanelWidth(_leftPanelWidth);
-                                    },
-                                    child: Container(
-                                      width: 6,
-                                      height: double.infinity,
-                                      color: theme.dividerColor.withOpacity(0.3),
-                                    ),
-                                  ),
-                                ),
-                              Expanded(
-                                child: Container(
-                                  key: _gridAreaKey,
-                                  child: Scrollbar(
-                                    controller: _tableVScrollCtrl,
-                                    thumbVisibility: true,
-                                    child: SingleChildScrollView(
+                                Expanded(
+                                  child: Container(
+                                    key: _gridAreaKey,
+                                    child: Scrollbar(
                                       controller: _tableVScrollCtrl,
-                                      scrollDirection: Axis.vertical,
-                                      child: Scrollbar(
-                                        controller: _tableHScrollCtrl,
-                                        thumbVisibility: true,
-                                        notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
-                                        child: SingleChildScrollView(
+                                      thumbVisibility: true,
+                                      child: SingleChildScrollView(
+                                        controller: _tableVScrollCtrl,
+                                        scrollDirection: Axis.vertical,
+                                        child: Scrollbar(
                                           controller: _tableHScrollCtrl,
-                                          scrollDirection: Axis.horizontal,
-                                          child: _buildTimetableGrid(context),
+                                          thumbVisibility: true,
+                                          notificationPredicate: (n) =>
+                                              n.metrics.axis == Axis.horizontal,
+                                          child: SingleChildScrollView(
+                                            controller: _tableHScrollCtrl,
+                                            scrollDirection: Axis.horizontal,
+                                            child: _buildTimetableGrid(context),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          if (_fullscreen)
-                            Positioned(
-                              top: 8,
-                              right: 16,
-                              child: Opacity(
-                                opacity: 0.95,
-                                child: _buildViewControls(context),
-                              ),
+                              ],
                             ),
-                        ],
+                            if (_fullscreen)
+                              Positioned(
+                                top: 8,
+                                right: 16,
+                                child: Opacity(
+                                  opacity: 0.95,
+                                  child: _buildViewControls(context),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                // Close RawKeyboardListener
+                    ],
+                  ),
+                  // Close RawKeyboardListener
                 ),
               ],
             ),
@@ -719,9 +882,12 @@ class _TimetablePageState extends State<TimetablePage>
   }
 
   Future<Map<String, int>> _computeClassSubjectMinutes(Class cls) async {
-    final assigned = await _dbService.getCoursesForClass(cls.name, cls.academicYear);
+    final assigned = await _dbService.getCoursesForClass(
+      cls.name,
+      cls.academicYear,
+    );
     final names = assigned.map((c) => c.name).toSet();
-    final Map<String, int> minutes = { for (final n in names) n: 0 };
+    final Map<String, int> minutes = {for (final n in names) n: 0};
     for (final e in _timetableEntries) {
       if (e.className == cls.name && e.academicYear == cls.academicYear) {
         final start = _toMin(e.startTime);
@@ -750,6 +916,7 @@ class _TimetablePageState extends State<TimetablePage>
           if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
           return '${h.toStringAsFixed(1)}h';
         }
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -763,7 +930,10 @@ class _TimetablePageState extends State<TimetablePage>
             runSpacing: 8,
             children: data.entries.map((e) {
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.primaryBlue.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(999),
@@ -771,7 +941,11 @@ class _TimetablePageState extends State<TimetablePage>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.schedule, size: 14, color: Color(0xFF3B82F6)),
+                    const Icon(
+                      Icons.schedule,
+                      size: 14,
+                      color: Color(0xFF3B82F6),
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       '${e.key}: ${fmtHours(e.value)}',
@@ -820,6 +994,7 @@ class _TimetablePageState extends State<TimetablePage>
           if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
           return '${h.toStringAsFixed(1)}h';
         }
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -833,7 +1008,10 @@ class _TimetablePageState extends State<TimetablePage>
             runSpacing: 8,
             children: data.entries.map((e) {
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.successGreen.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(999),
@@ -841,7 +1019,11 @@ class _TimetablePageState extends State<TimetablePage>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.person, size: 14, color: AppColors.successGreen),
+                    const Icon(
+                      Icons.person,
+                      size: 14,
+                      color: AppColors.successGreen,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       '${e.key}: ${fmtHours(e.value)}',
@@ -889,35 +1071,44 @@ class _TimetablePageState extends State<TimetablePage>
           if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
           return '${h.toStringAsFixed(1)}h';
         }
+
         final totalMinutes = data.values.fold<int>(0, (a, b) => a + b);
         final chips = <Widget>[];
-        chips.add(Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.summarize, size: 14, color: AppColors.primaryBlue),
-              const SizedBox(width: 6),
-              Text(
-                'Total: ${fmtHours(totalMinutes)}',
-                style: const TextStyle(
+        chips.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.summarize,
+                  size: 14,
                   color: AppColors.primaryBlue,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  'Total: ${fmtHours(totalMinutes)}',
+                  style: const TextStyle(
+                    color: AppColors.primaryBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ));
+        );
         final ordered = _daysOfWeek
             .where((d) => data.containsKey(d))
             .map((d) => MapEntry(d, data[d]!))
             .toList();
-        chips.addAll(ordered.map((e) => Container(
+        chips.addAll(
+          ordered.map(
+            (e) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.primaryBlue.withOpacity(0.08),
@@ -926,7 +1117,11 @@ class _TimetablePageState extends State<TimetablePage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today, size: 14, color: AppColors.primaryBlue),
+                  const Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: AppColors.primaryBlue,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${e.key}: ${fmtHours(e.value)}',
@@ -938,7 +1133,9 @@ class _TimetablePageState extends State<TimetablePage>
                   ),
                 ],
               ),
-            )));
+            ),
+          ),
+        );
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -947,17 +1144,15 @@ class _TimetablePageState extends State<TimetablePage>
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
           ),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: chips,
-          ),
+          child: Wrap(spacing: 8, runSpacing: 8, children: chips),
         );
       },
     );
   }
 
-  Future<Map<String, int>> _computeTeacherClassMinutes(String teacherName) async {
+  Future<Map<String, int>> _computeTeacherClassMinutes(
+    String teacherName,
+  ) async {
     final Map<String, int> minutes = {};
     for (final e in _timetableEntries) {
       if (e.teacher == teacherName) {
@@ -972,7 +1167,8 @@ class _TimetablePageState extends State<TimetablePage>
 
   Widget _buildTeacherHoursSummary(BuildContext context) {
     final teacherName = _selectedTeacherFilter;
-    if (teacherName == null || teacherName.isEmpty) return const SizedBox.shrink();
+    if (teacherName == null || teacherName.isEmpty)
+      return const SizedBox.shrink();
     final theme = Theme.of(context);
     return FutureBuilder<Map<String, int>>(
       future: _computeTeacherClassMinutes(teacherName),
@@ -985,31 +1181,40 @@ class _TimetablePageState extends State<TimetablePage>
           if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
           return '${h.toStringAsFixed(1)}h';
         }
+
         final totalMinutes = data.values.fold<int>(0, (a, b) => a + b);
         final chips = <Widget>[];
-        chips.add(Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.successGreen.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.summarize, size: 14, color: AppColors.successGreen),
-              const SizedBox(width: 6),
-              Text(
-                'Total: ${fmtHours(totalMinutes)}',
-                style: const TextStyle(
+        chips.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.successGreen.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.summarize,
+                  size: 14,
                   color: AppColors.successGreen,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  'Total: ${fmtHours(totalMinutes)}',
+                  style: const TextStyle(
+                    color: AppColors.successGreen,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ));
-        chips.addAll(data.entries.map((e) => Container(
+        );
+        chips.addAll(
+          data.entries.map(
+            (e) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.primaryBlue.withOpacity(0.08),
@@ -1018,7 +1223,11 @@ class _TimetablePageState extends State<TimetablePage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.class_, size: 14, color: AppColors.primaryBlue),
+                  const Icon(
+                    Icons.class_,
+                    size: 14,
+                    color: AppColors.primaryBlue,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${e.key}: ${fmtHours(e.value)}',
@@ -1030,7 +1239,9 @@ class _TimetablePageState extends State<TimetablePage>
                   ),
                 ],
               ),
-            )));
+            ),
+          ),
+        );
 
         return Container(
           width: double.infinity,
@@ -1040,11 +1251,7 @@ class _TimetablePageState extends State<TimetablePage>
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
           ),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: chips,
-          ),
+          child: Wrap(spacing: 8, runSpacing: 8, children: chips),
         );
       },
     );
@@ -1065,7 +1272,8 @@ class _TimetablePageState extends State<TimetablePage>
 
   Widget _buildTeacherDayHoursSummary(BuildContext context) {
     final teacherName = _selectedTeacherFilter;
-    if (teacherName == null || teacherName.isEmpty) return const SizedBox.shrink();
+    if (teacherName == null || teacherName.isEmpty)
+      return const SizedBox.shrink();
     final theme = Theme.of(context);
     return FutureBuilder<Map<String, int>>(
       future: _computeTeacherDayMinutes(teacherName),
@@ -1078,35 +1286,44 @@ class _TimetablePageState extends State<TimetablePage>
           if ((h - h.round()).abs() < 1e-6) return '${h.round()}h';
           return '${h.toStringAsFixed(1)}h';
         }
+
         final totalMinutes = data.values.fold<int>(0, (a, b) => a + b);
         final chips = <Widget>[];
-        chips.add(Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.summarize, size: 14, color: AppColors.primaryBlue),
-              const SizedBox(width: 6),
-              Text(
-                'Total: ${fmtHours(totalMinutes)}',
-                style: const TextStyle(
+        chips.add(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.summarize,
+                  size: 14,
                   color: AppColors.primaryBlue,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  'Total: ${fmtHours(totalMinutes)}',
+                  style: const TextStyle(
+                    color: AppColors.primaryBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ));
+        );
         final ordered = _daysOfWeek
             .where((d) => data.containsKey(d))
             .map((d) => MapEntry(d, data[d]!))
             .toList();
-        chips.addAll(ordered.map((e) => Container(
+        chips.addAll(
+          ordered.map(
+            (e) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.primaryBlue.withOpacity(0.08),
@@ -1115,7 +1332,11 @@ class _TimetablePageState extends State<TimetablePage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.calendar_today, size: 14, color: AppColors.primaryBlue),
+                  const Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: AppColors.primaryBlue,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${e.key}: ${fmtHours(e.value)}',
@@ -1127,7 +1348,9 @@ class _TimetablePageState extends State<TimetablePage>
                   ),
                 ],
               ),
-            )));
+            ),
+          ),
+        );
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -1136,11 +1359,7 @@ class _TimetablePageState extends State<TimetablePage>
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
           ),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: chips,
-          ),
+          child: Wrap(spacing: 8, runSpacing: 8, children: chips),
         );
       },
     );
@@ -1227,7 +1446,10 @@ class _TimetablePageState extends State<TimetablePage>
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: theme.dividerColor.withOpacity(0.3)),
               ),
-              child: Text('${(_gridZoom * 100).round()}%', style: theme.textTheme.bodySmall),
+              child: Text(
+                '${(_gridZoom * 100).round()}%',
+                style: theme.textTheme.bodySmall,
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -1267,10 +1489,15 @@ class _TimetablePageState extends State<TimetablePage>
           ),
           controlIcon(
             icon: Icons.restart_alt,
-            tooltip: 'Réinitialiser (zoom 100%, réafficher liste et résumés masqués)',
+            tooltip:
+                'Réinitialiser (zoom 100%, réafficher liste et résumés masqués)',
             selected: false,
             onTap: () {
-              setState(() { _gridZoom = 1.0; _showClassList = true; _showSummaries = false; });
+              setState(() {
+                _gridZoom = 1.0;
+                _showClassList = true;
+                _showSummaries = false;
+              });
               ttp.saveGridZoom(_gridZoom);
               ttp.saveShowClassList(_showClassList);
               ttp.saveShowSummaries(_showSummaries);
@@ -1279,7 +1506,9 @@ class _TimetablePageState extends State<TimetablePage>
           const SizedBox(width: 6),
           controlIcon(
             icon: _showSummaries ? Icons.summarize : Icons.summarize_outlined,
-            tooltip: _showSummaries ? 'Masquer les résumés' : 'Afficher les résumés',
+            tooltip: _showSummaries
+                ? 'Masquer les résumés'
+                : 'Afficher les résumés',
             selected: _showSummaries,
             onTap: () {
               setState(() => _showSummaries = !_showSummaries);
@@ -1288,8 +1517,12 @@ class _TimetablePageState extends State<TimetablePage>
           ),
           const SizedBox(width: 6),
           controlIcon(
-            icon: _showClassList ? Icons.view_sidebar : Icons.view_sidebar_outlined,
-            tooltip: _showClassList ? 'Masquer la liste des classes' : 'Afficher la liste des classes',
+            icon: _showClassList
+                ? Icons.view_sidebar
+                : Icons.view_sidebar_outlined,
+            tooltip: _showClassList
+                ? 'Masquer la liste des classes'
+                : 'Afficher la liste des classes',
             selected: _showClassList,
             onTap: () {
               setState(() => _showClassList = !_showClassList);
@@ -1364,11 +1597,14 @@ class _TimetablePageState extends State<TimetablePage>
               const SizedBox(width: 8),
               Text(
                 'Auto-génération des emplois du temps',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const Spacer(),
               Tooltip(
-                message: 'Éditer jours, créneaux et pauses (par classe ou global)',
+                message:
+                    'Éditer jours, créneaux et pauses (par classe ou global)',
                 child: OutlinedButton.icon(
                   onPressed: _showEditGridDialog,
                   icon: const Icon(Icons.schedule),
@@ -1376,7 +1612,12 @@ class _TimetablePageState extends State<TimetablePage>
                 ),
               ),
               const SizedBox(width: 8),
-              if (_isGenerating) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              if (_isGenerating)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1390,7 +1631,9 @@ class _TimetablePageState extends State<TimetablePage>
                 decoration: BoxDecoration(
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.2),
+                  ),
                 ),
                 child: Wrap(
                   spacing: 6,
@@ -1398,21 +1641,31 @@ class _TimetablePageState extends State<TimetablePage>
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('Jours:'),
-                    ...['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi']
-                        .map((d) => FilterChip(
-                              label: Text(d),
-                              selected: _daysOfWeek.contains(d),
-                              onSelected: (sel) async {
-                                setState(() {
-                                  if (sel) {
-                                    if (!_daysOfWeek.contains(d)) _daysOfWeek.add(d);
-                                  } else {
-                                    _daysOfWeek.remove(d);
-                                  }
-                                });
-                                await ttp.saveDays(_daysOfWeek);
-                              },
-                            ))
+                    ...[
+                          'Lundi',
+                          'Mardi',
+                          'Mercredi',
+                          'Jeudi',
+                          'Vendredi',
+                          'Samedi',
+                        ]
+                        .map(
+                          (d) => FilterChip(
+                            label: Text(d),
+                            selected: _daysOfWeek.contains(d),
+                            onSelected: (sel) async {
+                              setState(() {
+                                if (sel) {
+                                  if (!_daysOfWeek.contains(d))
+                                    _daysOfWeek.add(d);
+                                } else {
+                                  _daysOfWeek.remove(d);
+                                }
+                              });
+                              await ttp.saveDays(_daysOfWeek);
+                            },
+                          ),
+                        )
                         .toList(),
                   ],
                 ),
@@ -1435,21 +1688,27 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 140,
                 child: TextField(
                   controller: _afternoonStartCtrl,
-                  decoration: const InputDecoration(labelText: 'Début après-midi'),
+                  decoration: const InputDecoration(
+                    labelText: 'Début après-midi',
+                  ),
                 ),
               ),
               SizedBox(
                 width: 140,
                 child: TextField(
                   controller: _afternoonEndCtrl,
-                  decoration: const InputDecoration(labelText: 'Fin après-midi'),
+                  decoration: const InputDecoration(
+                    labelText: 'Fin après-midi',
+                  ),
                 ),
               ),
               SizedBox(
                 width: 140,
                 child: TextField(
                   controller: _sessionMinutesCtrl,
-                  decoration: const InputDecoration(labelText: 'Durée cours (min)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Durée cours (min)',
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -1457,7 +1716,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 140,
                 child: DropdownButtonFormField<String>(
                   value: _blockDefaultCtrl.text,
-                  decoration: const InputDecoration(labelText: 'Taille bloc par défaut'),
+                  decoration: const InputDecoration(
+                    labelText: 'Taille bloc par défaut',
+                  ),
                   items: const [
                     DropdownMenuItem(value: '1', child: Text('1h')),
                     DropdownMenuItem(value: '2', child: Text('2h')),
@@ -1472,7 +1733,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 160,
                 child: TextField(
                   controller: _threeHourThresholdCtrl,
-                  decoration: const InputDecoration(labelText: 'Seuil bloc 3h (coef×moyenne)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Seuil bloc 3h (coef×moyenne)',
+                  ),
                   keyboardType: TextInputType.numberWithOptions(decimal: true),
                 ),
               ),
@@ -1480,7 +1743,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 160,
                 child: TextField(
                   controller: _sessionsPerSubjectCtrl,
-                  decoration: const InputDecoration(labelText: 'Séances/matière (semaine)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Séances/matière (semaine)',
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -1488,7 +1753,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 160,
                 child: TextField(
                   controller: _teacherMaxPerDayCtrl,
-                  decoration: const InputDecoration(labelText: 'Max cours/jour (enseignant)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Max cours/jour (enseignant)',
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -1496,7 +1763,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 160,
                 child: TextField(
                   controller: _classMaxPerDayCtrl,
-                  decoration: const InputDecoration(labelText: 'Max cours/jour (classe)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Max cours/jour (classe)',
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -1504,7 +1773,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 180,
                 child: TextField(
                   controller: _subjectMaxPerDayCtrl,
-                  decoration: const InputDecoration(labelText: 'Max par matière/jour (classe)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Max par matière/jour (classe)',
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -1512,7 +1783,9 @@ class _TimetablePageState extends State<TimetablePage>
                 width: 200,
                 child: TextField(
                   controller: _optionalMaxMinutesCtrl,
-                  decoration: const InputDecoration(labelText: 'Max minutes optionnelles/sem.'),
+                  decoration: const InputDecoration(
+                    labelText: 'Max minutes optionnelles/sem.',
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ),
@@ -1534,7 +1807,9 @@ class _TimetablePageState extends State<TimetablePage>
                 decoration: BoxDecoration(
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.2),
+                  ),
                 ),
                 child: Wrap(
                   spacing: 6,
@@ -1542,20 +1817,24 @@ class _TimetablePageState extends State<TimetablePage>
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('Exclusions bloc 2h :'),
-                    ..._subjects.map((c) => FilterChip(
-                          label: Text(c.name),
-                          selected: _excludedFromTwoHourCap.contains(c.name),
-                          onSelected: (sel) async {
-                            setState(() {
-                              if (sel) {
-                                _excludedFromTwoHourCap.add(c.name);
-                              } else {
-                                _excludedFromTwoHourCap.remove(c.name);
-                              }
-                            });
-                            await ttp.saveTwoHourCapExcludedSubjects(_excludedFromTwoHourCap);
-                          },
-                        )),
+                    ..._subjects.map(
+                      (c) => FilterChip(
+                        label: Text(c.name),
+                        selected: _excludedFromTwoHourCap.contains(c.name),
+                        onSelected: (sel) async {
+                          setState(() {
+                            if (sel) {
+                              _excludedFromTwoHourCap.add(c.name);
+                            } else {
+                              _excludedFromTwoHourCap.remove(c.name);
+                            }
+                          });
+                          await ttp.saveTwoHourCapExcludedSubjects(
+                            _excludedFromTwoHourCap,
+                          );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1563,7 +1842,8 @@ class _TimetablePageState extends State<TimetablePage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Tooltip(
-                    message: 'Supprimer l\'emploi du temps existant avant de générer de nouveaux cours',
+                    message:
+                        'Supprimer l\'emploi du temps existant avant de générer de nouveaux cours',
                     child: Switch(
                       value: _clearBeforeGen,
                       onChanged: (v) => setState(() => _clearBeforeGen = v),
@@ -1576,7 +1856,8 @@ class _TimetablePageState extends State<TimetablePage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Tooltip(
-                    message: 'Essayer de remplir tous les créneaux disponibles (ignorer certaines limites)',
+                    message:
+                        'Essayer de remplir tous les créneaux disponibles (ignorer certaines limites)',
                     child: Switch(
                       value: _saturateAll,
                       onChanged: (v) => setState(() => _saturateAll = v),
@@ -1586,21 +1867,33 @@ class _TimetablePageState extends State<TimetablePage>
                 ],
               ),
               Tooltip(
-                message: 'Générer pour l\'ensemble des classes (selon vos paramètres)',
+                message:
+                    'Générer pour l\'ensemble des classes (selon vos paramètres)',
                 child: ElevatedButton.icon(
                   onPressed: _isGenerating ? null : _onGenerateForAllClasses,
                   icon: const Icon(Icons.apartment, color: Colors.white),
-                  label: const Text('Générer pour toutes les classes', style: TextStyle(color: Colors.white)),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue),
+                  label: const Text(
+                    'Générer pour toutes les classes',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryBlue,
+                  ),
                 ),
               ),
               Tooltip(
-                message: 'Générer pour l\'ensemble des enseignants (selon vos paramètres)',
+                message:
+                    'Générer pour l\'ensemble des enseignants (selon vos paramètres)',
                 child: ElevatedButton.icon(
                   onPressed: _isGenerating ? null : _onGenerateForAllTeachers,
                   icon: const Icon(Icons.person, color: Colors.white),
-                  label: const Text('Générer pour tous les enseignants', style: TextStyle(color: Colors.white)),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.successGreen),
+                  label: const Text(
+                    'Générer pour tous les enseignants',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.successGreen,
+                  ),
                 ),
               ),
               // Génération ciblée selon la vue
@@ -1608,20 +1901,34 @@ class _TimetablePageState extends State<TimetablePage>
                 Tooltip(
                   message: 'Générer uniquement pour la classe affichée',
                   child: ElevatedButton.icon(
-                    onPressed: _isGenerating ? null : _onGenerateForSelectedClass,
+                    onPressed: _isGenerating
+                        ? null
+                        : _onGenerateForSelectedClass,
                     icon: const Icon(Icons.class_, color: Colors.white),
-                    label: const Text('Générer pour la classe sélectionnée', style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6)),
+                    label: const Text(
+                      'Générer pour la classe sélectionnée',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B5CF6),
+                    ),
                   ),
                 )
               else
                 Tooltip(
                   message: 'Générer uniquement pour l\'enseignant affiché',
                   child: ElevatedButton.icon(
-                    onPressed: _isGenerating ? null : _onGenerateForSelectedTeacher,
+                    onPressed: _isGenerating
+                        ? null
+                        : _onGenerateForSelectedTeacher,
                     icon: const Icon(Icons.person_outline, color: Colors.white),
-                    label: const Text('Générer pour l\'enseignant sélectionné', style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF59E0B)),
+                    label: const Text(
+                      'Générer pour l\'enseignant sélectionné',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF59E0B),
+                    ),
                   ),
                 ),
               const SizedBox(height: 16),
@@ -1630,7 +1937,10 @@ class _TimetablePageState extends State<TimetablePage>
                 child: ElevatedButton.icon(
                   onPressed: _isGenerating ? null : _onClearTimetable,
                   icon: const Icon(Icons.clear_all, color: Colors.white),
-                  label: const Text('Restaurer à vierge', style: TextStyle(color: Colors.white)),
+                  label: const Text(
+                    'Restaurer à vierge',
+                    style: TextStyle(color: Colors.white),
+                  ),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 ),
               ),
@@ -1649,8 +1959,12 @@ class _TimetablePageState extends State<TimetablePage>
     final minutes = int.tryParse(_sessionMinutesCtrl.text) ?? 60;
     await ttp.saveSessionMinutes(minutes);
     await ttp.saveBlockDefaultSlots(int.tryParse(_blockDefaultCtrl.text) ?? 2);
-    await ttp.saveThreeHourThreshold(double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5);
-    await ttp.saveOptionalMaxMinutes(int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120);
+    await ttp.saveThreeHourThreshold(
+      double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
+    );
+    await ttp.saveOptionalMaxMinutes(
+      int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+    );
     await ttp.saveCapTwoHourBlocksWeekly(_capTwoHourBlocksWeekly);
     await ttp.saveTwoHourCapExcludedSubjects(_excludedFromTwoHourCap);
     // Also persist generated slots for consistency
@@ -1670,46 +1984,49 @@ class _TimetablePageState extends State<TimetablePage>
       final slots = List<String>.from(_timeSlots);
       final classBreaksMap = await ttp.loadClassBreakSlotsMap();
       int total = 0;
-          for (final cls in _classes) {
-            final classKey = _classKey(cls);
-            final effectiveBreaks = classBreaksMap[classKey] ?? _breakSlots;
-            int created = 0;
-            if (_saturateAll) {
-              created = await _scheduling.autoSaturateForClass(
-                targetClass: cls,
-                daysOfWeek: _daysOfWeek,
-                timeSlots: slots,
-                breakSlots: effectiveBreaks,
-                clearExisting: _clearBeforeGen,
-                optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
-                morningStart: _morningStartCtrl.text.trim(),
-                morningEnd: _morningEndCtrl.text.trim(),
-                afternoonStart: _afternoonStartCtrl.text.trim(),
-                afternoonEnd: _afternoonEndCtrl.text.trim(),
-              );
-            } else {
-              created = await _scheduling.autoGenerateForClass(
-                targetClass: cls,
-                daysOfWeek: _daysOfWeek,
-                timeSlots: slots,
-                breakSlots: effectiveBreaks,
-                clearExisting: _clearBeforeGen,
-                sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
-                enforceTeacherWeeklyHours: true,
-                teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
-                classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
-                subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
-                blockDefaultSlots: int.tryParse(_blockDefaultCtrl.text) ?? 2,
-                threeHourThreshold: double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
-                optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
-                limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
-                excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
-                morningStart: _morningStartCtrl.text.trim(),
-                morningEnd: _morningEndCtrl.text.trim(),
-                afternoonStart: _afternoonStartCtrl.text.trim(),
-                afternoonEnd: _afternoonEndCtrl.text.trim(),
-              );
-            }
+      for (final cls in _classes) {
+        final classKey = _classKey(cls);
+        final effectiveBreaks = classBreaksMap[classKey] ?? _breakSlots;
+        int created = 0;
+        if (_saturateAll) {
+          created = await _scheduling.autoSaturateForClass(
+            targetClass: cls,
+            daysOfWeek: _daysOfWeek,
+            timeSlots: slots,
+            breakSlots: effectiveBreaks,
+            clearExisting: _clearBeforeGen,
+            optionalMaxMinutes:
+                int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            morningStart: _morningStartCtrl.text.trim(),
+            morningEnd: _morningEndCtrl.text.trim(),
+            afternoonStart: _afternoonStartCtrl.text.trim(),
+            afternoonEnd: _afternoonEndCtrl.text.trim(),
+          );
+        } else {
+          created = await _scheduling.autoGenerateForClass(
+            targetClass: cls,
+            daysOfWeek: _daysOfWeek,
+            timeSlots: slots,
+            breakSlots: effectiveBreaks,
+            clearExisting: _clearBeforeGen,
+            sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+            enforceTeacherWeeklyHours: true,
+            teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
+            classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
+            subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
+            blockDefaultSlots: int.tryParse(_blockDefaultCtrl.text) ?? 2,
+            threeHourThreshold:
+                double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
+            optionalMaxMinutes:
+                int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
+            excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
+            morningStart: _morningStartCtrl.text.trim(),
+            morningEnd: _morningEndCtrl.text.trim(),
+            afternoonStart: _afternoonStartCtrl.text.trim(),
+            afternoonEnd: _afternoonEndCtrl.text.trim(),
+          );
+        }
         total += created;
       }
       if (mounted) {
@@ -1721,7 +2038,8 @@ class _TimetablePageState extends State<TimetablePage>
         await _dbService.logAudit(
           category: 'timetable',
           action: 'auto_generate_classes',
-          details: 'classes=${_classes.length} slots=${slots.length} days=${_daysOfWeek.length} saturate=${_saturateAll ? 1 : 0}',
+          details:
+              'classes=${_classes.length} slots=${slots.length} days=${_daysOfWeek.length} saturate=${_saturateAll ? 1 : 0}',
         );
       } catch (_) {}
     } finally {
@@ -1759,7 +2077,8 @@ class _TimetablePageState extends State<TimetablePage>
             timeSlots: slots,
             breakSlots: effectiveBreaks,
             clearExisting: _clearBeforeGen,
-            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            optionalMaxMinutes:
+                int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
           );
         } else {
           created = await _scheduling.autoGenerateForTeacher(
@@ -1773,7 +2092,8 @@ class _TimetablePageState extends State<TimetablePage>
             teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
             classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
             subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
-            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            optionalMaxMinutes:
+                int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
             limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
             excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
           );
@@ -1782,14 +2102,19 @@ class _TimetablePageState extends State<TimetablePage>
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Génération (enseignants) terminée: $total cours créés.')),
+          SnackBar(
+            content: Text(
+              'Génération (enseignants) terminée: $total cours créés.',
+            ),
+          ),
         );
       }
       try {
         await _dbService.logAudit(
           category: 'timetable',
           action: 'auto_generate_teachers',
-          details: 'teachers=${_teachers.length} slots=${slots.length} days=${_daysOfWeek.length} saturate=${_saturateAll ? 1 : 0}',
+          details:
+              'teachers=${_teachers.length} slots=${slots.length} days=${_daysOfWeek.length} saturate=${_saturateAll ? 1 : 0}',
         );
       } catch (_) {}
     } finally {
@@ -1820,7 +2145,8 @@ class _TimetablePageState extends State<TimetablePage>
               timeSlots: List<String>.from(_timeSlots),
               breakSlots: effectiveBreaks,
               clearExisting: _clearBeforeGen,
-              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+              optionalMaxMinutes:
+                  int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
               morningStart: _morningStartCtrl.text.trim(),
               morningEnd: _morningEndCtrl.text.trim(),
               afternoonStart: _afternoonStartCtrl.text.trim(),
@@ -1832,14 +2158,17 @@ class _TimetablePageState extends State<TimetablePage>
               timeSlots: List<String>.from(_timeSlots),
               breakSlots: effectiveBreaks,
               clearExisting: _clearBeforeGen,
-              sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+              sessionsPerSubject:
+                  int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
               enforceTeacherWeeklyHours: true,
               teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
               classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
               subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
               blockDefaultSlots: int.tryParse(_blockDefaultCtrl.text) ?? 2,
-              threeHourThreshold: double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
-              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+              threeHourThreshold:
+                  double.tryParse(_threeHourThresholdCtrl.text) ?? 1.5,
+              optionalMaxMinutes:
+                  int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
               limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
               excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
               morningStart: _morningStartCtrl.text.trim(),
@@ -1849,14 +2178,17 @@ class _TimetablePageState extends State<TimetablePage>
             );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Génération: $created cours pour ${cls.name}.')),
+          SnackBar(
+            content: Text('Génération: $created cours pour ${cls.name}.'),
+          ),
         );
       }
       try {
         await _dbService.logAudit(
           category: 'timetable',
           action: 'auto_generate_class',
-          details: 'class=${cls.name} year=${cls.academicYear} saturate=${_saturateAll ? 1 : 0}',
+          details:
+              'class=${cls.name} year=${cls.academicYear} saturate=${_saturateAll ? 1 : 0}',
         );
       } catch (_) {}
     } finally {
@@ -1878,9 +2210,9 @@ class _TimetablePageState extends State<TimetablePage>
       orElse: () => Staff.empty(),
     );
     if (teacher.id.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enseignant introuvable.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enseignant introuvable.')));
       return;
     }
     setState(() => _isGenerating = true);
@@ -1893,7 +2225,8 @@ class _TimetablePageState extends State<TimetablePage>
               timeSlots: List<String>.from(_timeSlots),
               breakSlots: _breakSlots,
               clearExisting: _clearBeforeGen,
-              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+              optionalMaxMinutes:
+                  int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
             )
           : await _scheduling.autoGenerateForTeacher(
               teacher: teacher,
@@ -1901,16 +2234,20 @@ class _TimetablePageState extends State<TimetablePage>
               timeSlots: List<String>.from(_timeSlots),
               breakSlots: _breakSlots,
               clearExisting: _clearBeforeGen,
-              sessionsPerSubject: int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
+              sessionsPerSubject:
+                  int.tryParse(_sessionsPerSubjectCtrl.text) ?? 1,
               enforceTeacherWeeklyHours: true,
               teacherMaxPerDay: int.tryParse(_teacherMaxPerDayCtrl.text) ?? 0,
               classMaxPerDay: int.tryParse(_classMaxPerDayCtrl.text) ?? 0,
               subjectMaxPerDay: int.tryParse(_subjectMaxPerDayCtrl.text) ?? 0,
-              optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+              optionalMaxMinutes:
+                  int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
             );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Génération: $created cours pour $teacherName.')),
+          SnackBar(
+            content: Text('Génération: $created cours pour $teacherName.'),
+          ),
         );
       }
       try {
@@ -1932,9 +2269,7 @@ class _TimetablePageState extends State<TimetablePage>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Icon(Icons.warning, color: Colors.red[600]),
@@ -2000,7 +2335,7 @@ class _TimetablePageState extends State<TimetablePage>
     try {
       // Clear all timetable entries
       await _dbService.clearAllTimetableEntries();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2124,12 +2459,19 @@ class _TimetablePageState extends State<TimetablePage>
                     // Check teacher unavailability for the entry's teacher
                     if (entry.teacher.isNotEmpty) {
                       final yr = await _effectiveAcademicYear();
-                      final un = await _dbService.getTeacherUnavailability(entry.teacher, yr);
-                      final unKeys = un.map((e) => '${e['dayOfWeek']}|${e['startTime']}').toSet();
+                      final un = await _dbService.getTeacherUnavailability(
+                        entry.teacher,
+                        yr,
+                      );
+                      final unKeys = un
+                          .map((e) => '${e['dayOfWeek']}|${e['startTime']}')
+                          .toSet();
                       if (unKeys.contains('$day|$slotStartTime')) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Créneau indisponible pour l\'enseignant.'),
+                            content: Text(
+                              'Créneau indisponible pour l\'enseignant.',
+                            ),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -2138,9 +2480,13 @@ class _TimetablePageState extends State<TimetablePage>
                     }
                     // Helper overlap check
                     bool overlaps(String aS, String aE, String bS, String bE) {
-                      final a1 = _toMin(aS), a2 = _toMin(aE), b1 = _toMin(bS), b2 = _toMin(bE);
+                      final a1 = _toMin(aS),
+                          a2 = _toMin(aE),
+                          b1 = _toMin(bS),
+                          b2 = _toMin(bE);
                       return a1 < b2 && b1 < a2;
                     }
+
                     // Insert new (from palette) or move existing
                     if (entry.id == null) {
                       final cls = _selectedClass();
@@ -2167,12 +2513,18 @@ class _TimetablePageState extends State<TimetablePage>
                       );
                       // Room conflict if provided
                       if (toCreate.room.trim().isNotEmpty) {
-                        final hasRoomConflict = _timetableEntries.any((e) =>
-                          e.id != toCreate.id &&
-                          e.dayOfWeek == day &&
-                          e.room.trim().isNotEmpty &&
-                          e.room.trim() == toCreate.room.trim() &&
-                          overlaps(e.startTime, e.endTime, slotStartTime, slotEndTime)
+                        final hasRoomConflict = _timetableEntries.any(
+                          (e) =>
+                              e.id != toCreate.id &&
+                              e.dayOfWeek == day &&
+                              e.room.trim().isNotEmpty &&
+                              e.room.trim() == toCreate.room.trim() &&
+                              overlaps(
+                                e.startTime,
+                                e.endTime,
+                                slotStartTime,
+                                slotEndTime,
+                              ),
                         );
                         if (hasRoomConflict) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -2230,12 +2582,18 @@ class _TimetablePageState extends State<TimetablePage>
                       );
                       // Room conflict if provided
                       if (moved.room.trim().isNotEmpty) {
-                        final hasRoomConflict = _timetableEntries.any((e) =>
-                          e.id != moved.id &&
-                          e.dayOfWeek == day &&
-                          e.room.trim().isNotEmpty &&
-                          e.room.trim() == moved.room.trim() &&
-                          overlaps(e.startTime, e.endTime, slotStartTime, newEnd)
+                        final hasRoomConflict = _timetableEntries.any(
+                          (e) =>
+                              e.id != moved.id &&
+                              e.dayOfWeek == day &&
+                              e.room.trim().isNotEmpty &&
+                              e.room.trim() == moved.room.trim() &&
+                              overlaps(
+                                e.startTime,
+                                e.endTime,
+                                slotStartTime,
+                                newEnd,
+                              ),
                         );
                         if (hasRoomConflict) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -2561,14 +2919,20 @@ class _TimetablePageState extends State<TimetablePage>
         final bool bw = constraints.hasBoundedWidth;
         final bool bh = constraints.hasBoundedHeight;
         final double colWidth = bw
-            ? ((constraints.maxWidth - (leftGutter)).clamp(0.0, double.infinity) /
-                    _daysOfWeek.length) *
-                _gridZoom
+            ? ((constraints.maxWidth - (leftGutter)).clamp(
+                        0.0,
+                        double.infinity,
+                      ) /
+                      _daysOfWeek.length) *
+                  _gridZoom
             : (baseCol * _gridZoom);
         final double rowHeight = bh
-            ? ((constraints.maxHeight - (topGutter)).clamp(0.0, double.infinity) /
-                    (rowCount > 0 ? rowCount : 1)) *
-                _gridZoom
+            ? ((constraints.maxHeight - (topGutter)).clamp(
+                        0.0,
+                        double.infinity,
+                      ) /
+                      (rowCount > 0 ? rowCount : 1)) *
+                  _gridZoom
             : (baseRow * _gridZoom);
         final stackWidth = leftGutter + colWidth * _daysOfWeek.length;
         final stackHeight =
@@ -2680,8 +3044,13 @@ class _TimetablePageState extends State<TimetablePage>
                     // Additional teacher unavailability check for the entry's teacher
                     if (entry.teacher.isNotEmpty) {
                       final yr = await _effectiveAcademicYear();
-                      final un = await _dbService.getTeacherUnavailability(entry.teacher, yr);
-                      final unKeys = un.map((e) => '${e['dayOfWeek']}|${e['startTime']}').toSet();
+                      final un = await _dbService.getTeacherUnavailability(
+                        entry.teacher,
+                        yr,
+                      );
+                      final unKeys = un
+                          .map((e) => '${e['dayOfWeek']}|${e['startTime']}')
+                          .toSet();
                       // For moved blocks, check all covered starts; for new, check slotStart only
                       final startsToCheck = <String>[];
                       startsToCheck.add(slotStart);
@@ -2702,7 +3071,9 @@ class _TimetablePageState extends State<TimetablePage>
                         if (unKeys.contains('$day|$st')) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Créneau indisponible pour l\'enseignant.'),
+                              content: Text(
+                                'Créneau indisponible pour l\'enseignant.',
+                              ),
                               backgroundColor: Colors.red,
                             ),
                           );
@@ -2710,11 +3081,21 @@ class _TimetablePageState extends State<TimetablePage>
                         }
                       }
                     }
-                    bool overlapsMM(String aS, String aE, String bS, String bE) {
-                      int? a1 = toMin(aS), a2 = toMin(aE), b1 = toMin(bS), b2 = toMin(bE);
-                      if (a1 == null || a2 == null || b1 == null || b2 == null) return false;
+                    bool overlapsMM(
+                      String aS,
+                      String aE,
+                      String bS,
+                      String bE,
+                    ) {
+                      int? a1 = toMin(aS),
+                          a2 = toMin(aE),
+                          b1 = toMin(bS),
+                          b2 = toMin(bE);
+                      if (a1 == null || a2 == null || b1 == null || b2 == null)
+                        return false;
                       return a1 < b2 && b1 < a2;
                     }
+
                     final conflict = _timetableEntries.any(
                       (e) =>
                           e.dayOfWeek == _daysOfWeek[d] &&
@@ -2756,12 +3137,18 @@ class _TimetablePageState extends State<TimetablePage>
                       );
                       // Room conflict if provided
                       if (toCreate.room.trim().isNotEmpty) {
-                        final hasRoomConflict = _timetableEntries.any((e) =>
-                          e.id != toCreate.id &&
-                          e.dayOfWeek == _daysOfWeek[d] &&
-                          e.room.trim().isNotEmpty &&
-                          e.room.trim() == toCreate.room.trim() &&
-                          overlapsMM(e.startTime, e.endTime, slotStart, slotEnd)
+                        final hasRoomConflict = _timetableEntries.any(
+                          (e) =>
+                              e.id != toCreate.id &&
+                              e.dayOfWeek == _daysOfWeek[d] &&
+                              e.room.trim().isNotEmpty &&
+                              e.room.trim() == toCreate.room.trim() &&
+                              overlapsMM(
+                                e.startTime,
+                                e.endTime,
+                                slotStart,
+                                slotEnd,
+                              ),
                         );
                         if (hasRoomConflict) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -2806,12 +3193,18 @@ class _TimetablePageState extends State<TimetablePage>
                       );
                       // Room conflict if provided
                       if (moved.room.trim().isNotEmpty) {
-                        final hasRoomConflict = _timetableEntries.any((e) =>
-                          e.id != moved.id &&
-                          e.dayOfWeek == _daysOfWeek[d] &&
-                          e.room.trim().isNotEmpty &&
-                          e.room.trim() == moved.room.trim() &&
-                          overlapsMM(e.startTime, e.endTime, slotStart, newEnd)
+                        final hasRoomConflict = _timetableEntries.any(
+                          (e) =>
+                              e.id != moved.id &&
+                              e.dayOfWeek == _daysOfWeek[d] &&
+                              e.room.trim().isNotEmpty &&
+                              e.room.trim() == moved.room.trim() &&
+                              overlapsMM(
+                                e.startTime,
+                                e.endTime,
+                                slotStart,
+                                newEnd,
+                              ),
                         );
                         if (hasRoomConflict) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -2841,8 +3234,8 @@ class _TimetablePageState extends State<TimetablePage>
           }
         }
 
-    // Render entries as positioned blocks
-    for (final e in entries) {
+        // Render entries as positioned blocks
+        for (final e in entries) {
           final dayIndex = _daysOfWeek.indexOf(e.dayOfWeek);
           if (dayIndex < 0) continue;
           final sIdx = indexFor(e.startTime);
@@ -2867,124 +3260,146 @@ class _TimetablePageState extends State<TimetablePage>
               overflow: TextOverflow.ellipsis,
             ),
           );
-      children.add(
-        Positioned(
-          left: leftGutter + dayIndex * colWidth + 2,
-          top: top,
-          width: colWidth - 4,
-          height: height > 28 ? height : 28,
-          child: Draggable<TimetableEntry>(
-            data: e,
-            feedback: Material(color: Colors.transparent, child: content),
-            childWhenDragging: Opacity(opacity: 0.4, child: content),
-            child: GestureDetector(
-              onTap: () => _showAddEditTimetableEntryDialog(entry: e),
-              child: content,
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Empty-state overlay with quick actions when no entries
-    if (entries.isEmpty) {
-      Widget actionButton({required IconData icon, required String label, required VoidCallback onPressed, Color? color}) {
-        return ElevatedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon, size: 18),
-          label: Text(label),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color ?? theme.colorScheme.primary,
-            foregroundColor: Colors.white,
-          ),
-        );
-      }
-      children.add(
-        Positioned.fill(
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              constraints: const BoxConstraints(maxWidth: 560),
-              decoration: BoxDecoration(
-                color: theme.cardColor.withOpacity(0.96),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
-                boxShadow: [
-                  BoxShadow(color: theme.shadowColor.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4)),
-                ],
+          children.add(
+            Positioned(
+              left: leftGutter + dayIndex * colWidth + 2,
+              top: top,
+              width: colWidth - 4,
+              height: height > 28 ? height : 28,
+              child: Draggable<TimetableEntry>(
+                data: e,
+                feedback: Material(color: Colors.transparent, child: content),
+                childWhenDragging: Opacity(opacity: 0.4, child: content),
+                child: GestureDetector(
+                  onTap: () => _showAddEditTimetableEntryDialog(entry: e),
+                  child: content,
+                ),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Icon(Icons.calendar_today, color: theme.colorScheme.primary, size: 28),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Aucun cours à afficher',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _isClassView
-                        ? 'Ajoutez un cours pour la classe sélectionnée, ou utilisez la génération automatique.'
-                        : 'Ajoutez un cours pour l\'enseignant sélectionné, ou utilisez la génération automatique.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      actionButton(
-                        icon: Icons.add,
-                        label: 'Ajouter un cours',
-                        onPressed: () {
-                          Navigator.of(context).popUntil((_) => true); // ensure overlay closes if opened elsewhere
-                          _showAddEditTimetableEntryDialog();
-                        },
-                      ),
-                      actionButton(
-                        icon: Icons.auto_mode,
-                        label: 'Auto‑générer',
-                        color: Colors.green,
-                        onPressed: () async {
-                          if (_isClassView) {
-                            await _autoGenerateForSelectedClass();
-                          } else {
-                            await _autoGenerateForSelectedTeacher();
-                          }
-                        },
-                      ),
-                      actionButton(
-                        icon: Icons.tune,
-                        label: 'Paramètres',
-                        color: Colors.orange,
-                        onPressed: () {
-                          setState(() { _tabController.index = 0; });
-                        },
-                      ),
-                      actionButton(
-                        icon: Icons.help_outline,
-                        label: 'Aide',
-                        color: theme.colorScheme.secondary,
-                        onPressed: _showTimetableHelp,
+            ),
+          );
+        }
+
+        // Empty-state overlay with quick actions when no entries
+        if (entries.isEmpty) {
+          Widget actionButton({
+            required IconData icon,
+            required String label,
+            required VoidCallback onPressed,
+            Color? color,
+          }) {
+            return ElevatedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon, size: 18),
+              label: Text(label),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color ?? theme.colorScheme.primary,
+                foregroundColor: Colors.white,
+              ),
+            );
+          }
+
+          children.add(
+            Positioned.fill(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  decoration: BoxDecoration(
+                    color: theme.cardColor.withOpacity(0.96),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: theme.dividerColor.withOpacity(0.2),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.shadowColor.withOpacity(0.06),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        color: theme.colorScheme.primary,
+                        size: 28,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Aucun cours à afficher',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _isClassView
+                            ? 'Ajoutez un cours pour la classe sélectionnée, ou utilisez la génération automatique.'
+                            : 'Ajoutez un cours pour l\'enseignant sélectionné, ou utilisez la génération automatique.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          actionButton(
+                            icon: Icons.add,
+                            label: 'Ajouter un cours',
+                            onPressed: () {
+                              Navigator.of(context).popUntil(
+                                (_) => true,
+                              ); // ensure overlay closes if opened elsewhere
+                              _showAddEditTimetableEntryDialog();
+                            },
+                          ),
+                          actionButton(
+                            icon: Icons.auto_mode,
+                            label: 'Auto‑générer',
+                            color: Colors.green,
+                            onPressed: () async {
+                              if (_isClassView) {
+                                await _autoGenerateForSelectedClass();
+                              } else {
+                                await _autoGenerateForSelectedTeacher();
+                              }
+                            },
+                          ),
+                          actionButton(
+                            icon: Icons.tune,
+                            label: 'Paramètres',
+                            color: Colors.orange,
+                            onPressed: () {
+                              setState(() {
+                                _tabController.index = 0;
+                              });
+                            },
+                          ),
+                          actionButton(
+                            icon: Icons.help_outline,
+                            label: 'Aide',
+                            color: theme.colorScheme.secondary,
+                            onPressed: _showTimetableHelp,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-      );
-    }
+          );
+        }
 
-    return SizedBox(
-      width: stackWidth.isFinite ? stackWidth : null,
-      height: stackHeight.isFinite ? stackHeight : null,
-      child: Stack(children: children),
+        return SizedBox(
+          width: stackWidth.isFinite ? stackWidth : null,
+          height: stackHeight.isFinite ? stackHeight : null,
+          child: Stack(children: children),
         );
       },
     );
@@ -3038,9 +3453,13 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: sessionsPerSubject,
                       items: const [1, 2, 3]
-                          .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                          .map(
+                            (n) =>
+                                DropdownMenuItem(value: n, child: Text('$n')),
+                          )
                           .toList(),
-                      onChanged: (v) => setState(() => sessionsPerSubject = v ?? 1),
+                      onChanged: (v) =>
+                          setState(() => sessionsPerSubject = v ?? 1),
                     ),
                   ],
                 ),
@@ -3052,7 +3471,12 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: classMaxPerDay,
                       items: const [0, 3, 4, 5, 6, 7, 8]
-                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) => setState(() => classMaxPerDay = v ?? 0),
                     ),
@@ -3066,9 +3490,15 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: subjectMaxPerDay,
                       items: const [0, 1, 2, 3]
-                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (v) => setState(() => subjectMaxPerDay = v ?? 0),
+                      onChanged: (v) =>
+                          setState(() => subjectMaxPerDay = v ?? 0),
                     ),
                   ],
                 ),
@@ -3080,13 +3510,19 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: teacherMaxPerDay,
                       items: const [0, 3, 4, 5, 6, 7, 8]
-                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (v) => setState(() => teacherMaxPerDay = v ?? 0),
+                      onChanged: (v) =>
+                          setState(() => teacherMaxPerDay = v ?? 0),
                     ),
                   ],
                 ),
-],
+              ],
             ),
             actions: [
               TextButton(
@@ -3160,7 +3596,19 @@ class _TimetablePageState extends State<TimetablePage>
     int sessionsPerSubject = 1;
     int teacherMaxPerDay = 0;
     int weeklyHours = teacher.weeklyHours ?? 0;
-    final List<int> weeklyHoursOptions = [0, 5, 10, 12, 15, 18, 20, 24, 30, 36, 40];
+    final List<int> weeklyHoursOptions = [
+      0,
+      5,
+      10,
+      12,
+      15,
+      18,
+      20,
+      24,
+      30,
+      36,
+      40,
+    ];
     if (weeklyHours != 0 && !weeklyHoursOptions.contains(weeklyHours)) {
       weeklyHoursOptions.insert(1, weeklyHours);
     }
@@ -3197,9 +3645,13 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: sessionsPerSubject,
                       items: const [1, 2, 3]
-                          .map((n) => DropdownMenuItem(value: n, child: Text('$n')))
+                          .map(
+                            (n) =>
+                                DropdownMenuItem(value: n, child: Text('$n')),
+                          )
                           .toList(),
-                      onChanged: (v) => setState(() => sessionsPerSubject = v ?? 1),
+                      onChanged: (v) =>
+                          setState(() => sessionsPerSubject = v ?? 1),
                     ),
                   ],
                 ),
@@ -3211,7 +3663,12 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: weeklyHours,
                       items: weeklyHoursOptions
-                          .map((n) => DropdownMenuItem<int>(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem<int>(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) => setState(() => weeklyHours = v ?? 0),
                     ),
@@ -3225,7 +3682,12 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: classMaxPerDay,
                       items: const [0, 3, 4, 5, 6, 7, 8]
-                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
                       onChanged: (v) => setState(() => classMaxPerDay = v ?? 0),
                     ),
@@ -3239,9 +3701,15 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: subjectMaxPerDay,
                       items: const [0, 1, 2, 3]
-                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (v) => setState(() => subjectMaxPerDay = v ?? 0),
+                      onChanged: (v) =>
+                          setState(() => subjectMaxPerDay = v ?? 0),
                     ),
                   ],
                 ),
@@ -3253,13 +3721,19 @@ class _TimetablePageState extends State<TimetablePage>
                     DropdownButton<int>(
                       value: teacherMaxPerDay,
                       items: const [0, 3, 4, 5, 6, 7, 8]
-                          .map((n) => DropdownMenuItem(value: n, child: Text(n == 0 ? 'Illimité' : '$n')))
+                          .map(
+                            (n) => DropdownMenuItem(
+                              value: n,
+                              child: Text(n == 0 ? 'Illimité' : '$n'),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (v) => setState(() => teacherMaxPerDay = v ?? 0),
+                      onChanged: (v) =>
+                          setState(() => teacherMaxPerDay = v ?? 0),
                     ),
                   ],
                 ),
-],
+              ],
             ),
             actions: [
               TextButton(
@@ -3307,7 +3781,8 @@ class _TimetablePageState extends State<TimetablePage>
             timeSlots: _timeSlots,
             breakSlots: effectiveBreaks,
             clearExisting: clearExisting,
-            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            optionalMaxMinutes:
+                int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
           )
         : await _scheduling.autoGenerateForTeacher(
             teacher: teacher,
@@ -3320,7 +3795,8 @@ class _TimetablePageState extends State<TimetablePage>
             teacherWeeklyHours: weeklyHours,
             subjectMaxPerDay: subjectMaxPerDay == 0 ? null : subjectMaxPerDay,
             classMaxPerDay: classMaxPerDay == 0 ? null : classMaxPerDay,
-            optionalMaxMinutes: int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
+            optionalMaxMinutes:
+                int.tryParse(_optionalMaxMinutesCtrl.text) ?? 120,
             limitTwoHourBlocksPerWeek: _capTwoHourBlocksWeekly,
             excludedFromWeeklyTwoHourCap: _excludedFromTwoHourCap,
           );
@@ -3495,7 +3971,10 @@ class _TimetablePageState extends State<TimetablePage>
                           : <String>{},
                       toKey: _classKey,
                       onApply: (selectedKeys) async {
-                        await ttp.saveClassBreaksForClasses(selectedKeys, breaks);
+                        await ttp.saveClassBreaksForClasses(
+                          selectedKeys,
+                          breaks,
+                        );
                         // Reload mapping locally
                         final map = await ttp.loadClassBreakSlotsMap();
                         setState(() {
@@ -4047,16 +4526,21 @@ class _TimetablePageState extends State<TimetablePage>
                 String sRoom = (roomController.text).trim();
                 // Room conflict (overlap on same room)
                 bool overlaps(String aS, String aE, String bS, String bE) {
-                  final a1 = _toMin(aS), a2 = _toMin(aE), b1 = _toMin(bS), b2 = _toMin(bE);
+                  final a1 = _toMin(aS),
+                      a2 = _toMin(aE),
+                      b1 = _toMin(bS),
+                      b2 = _toMin(bE);
                   return a1 < b2 && b1 < a2;
                 }
+
                 if (sRoom.isNotEmpty) {
-                  final hasRoomConflict = _timetableEntries.any((e) =>
-                    (entry == null || e.id != entry!.id) &&
-                    e.dayOfWeek == sDay &&
-                    e.room.trim().isNotEmpty &&
-                    e.room.trim() == sRoom &&
-                    overlaps(e.startTime, e.endTime, sStart, sEnd)
+                  final hasRoomConflict = _timetableEntries.any(
+                    (e) =>
+                        (entry == null || e.id != entry!.id) &&
+                        e.dayOfWeek == sDay &&
+                        e.room.trim().isNotEmpty &&
+                        e.room.trim() == sRoom &&
+                        overlaps(e.startTime, e.endTime, sStart, sEnd),
                   );
                   if (hasRoomConflict) {
                     scaffoldMessenger.showSnackBar(
@@ -4071,12 +4555,19 @@ class _TimetablePageState extends State<TimetablePage>
                 // Teacher unavailability at start time
                 if ((selectedTeacher ?? '').isNotEmpty) {
                   final yr = await _effectiveAcademicYear();
-                  final un = await _dbService.getTeacherUnavailability(selectedTeacher!, yr);
-                  final unKeys = un.map((e) => '${e['dayOfWeek']}|${e['startTime']}').toSet();
+                  final un = await _dbService.getTeacherUnavailability(
+                    selectedTeacher!,
+                    yr,
+                  );
+                  final unKeys = un
+                      .map((e) => '${e['dayOfWeek']}|${e['startTime']}')
+                      .toSet();
                   if (unKeys.contains('$sDay|$sStart')) {
                     scaffoldMessenger.showSnackBar(
                       const SnackBar(
-                        content: Text('Créneau indisponible pour l\'enseignant.'),
+                        content: Text(
+                          'Créneau indisponible pour l\'enseignant.',
+                        ),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -4222,23 +4713,28 @@ class _TimetablePageState extends State<TimetablePage>
     final steps = [
       {
         'title': 'Vue et filtres',
-        'body': 'Basculez Classe/Enseignant et choisissez la classe ou l\'enseignant à afficher. Vous pouvez aussi rechercher par nom, matière ou salle.',
+        'body':
+            'Basculez Classe/Enseignant et choisissez la classe ou l\'enseignant à afficher. Vous pouvez aussi rechercher par nom, matière ou salle.',
       },
       {
         'title': 'Barre d\'outils d\'affichage',
-        'body': 'Ajustez le zoom, affichez/masquez les résumés et la liste des classes, ou passez en plein écran pour maximiser la grille.',
+        'body':
+            'Ajustez le zoom, affichez/masquez les résumés et la liste des classes, ou passez en plein écran pour maximiser la grille.',
       },
       {
         'title': 'Grille d\'emploi du temps',
-        'body': 'Glissez‑déposez un cours pour le déplacer. Les conflits (salle occupée, indisponibilité enseignant) sont signalés.',
+        'body':
+            'Glissez‑déposez un cours pour le déplacer. Les conflits (salle occupée, indisponibilité enseignant) sont signalés.',
       },
       {
         'title': 'Palette des matières',
-        'body': 'Glissez une matière de la palette vers la grille pour créer un cours dans le créneau visé.',
+        'body':
+            'Glissez une matière de la palette vers la grille pour créer un cours dans le créneau visé.',
       },
       {
         'title': 'Paramètres & Auto‑génération',
-        'body': 'Dans l\'onglet Paramètres, configurez jours/créneaux/pauses et générez automatiquement pour classes ou enseignants.',
+        'body':
+            'Dans l\'onglet Paramètres, configurez jours/créneaux/pauses et générez automatiquement pour classes ou enseignants.',
       },
     ];
 
@@ -4257,11 +4753,16 @@ class _TimetablePageState extends State<TimetablePage>
 
     GlobalKey? _keyForStep(int s) {
       switch (s) {
-        case 0: return _filtersBarKey;
-        case 1: return _viewControlsKey;
-        case 2: return _gridAreaKey;
-        case 3: return _paletteKey;
-        case 4: return _tabBarKey;
+        case 0:
+          return _filtersBarKey;
+        case 1:
+          return _viewControlsKey;
+        case 2:
+          return _gridAreaKey;
+        case 3:
+          return _paletteKey;
+        case 4:
+          return _tabBarKey;
       }
       return null;
     }
@@ -4290,145 +4791,171 @@ class _TimetablePageState extends State<TimetablePage>
                 ),
               ),
               SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(maxWidth: 680),
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.dividerColor.withOpacity(0.2)),
-                    boxShadow: [
-                      BoxShadow(color: theme.shadowColor.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 4)),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header with colored gradient
-                      Builder(builder: (context) {
-                        final accents = [
-                          theme.colorScheme.primary,
-                          theme.colorScheme.secondary,
-                          Colors.teal,
-                          Colors.orange,
-                          Colors.purple,
-                        ];
-                        final Color a = accents[step % accents.length];
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [a, a.withOpacity(0.7)]),
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(12),
-                              topRight: Radius.circular(12),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      margin: const EdgeInsets.all(16),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.dividerColor.withOpacity(0.2),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: theme.shadowColor.withOpacity(0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Header with colored gradient
+                          Builder(
+                            builder: (context) {
+                              final accents = [
+                                theme.colorScheme.primary,
+                                theme.colorScheme.secondary,
+                                Colors.teal,
+                                Colors.orange,
+                                Colors.purple,
+                              ];
+                              final Color a = accents[step % accents.length];
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [a, a.withOpacity(0.7)],
+                                  ),
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(12),
+                                    topRight: Radius.circular(12),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.tour, color: Colors.white),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Tour guidé — ${steps[step]['title']}',
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Ignorer le tour',
+                                      icon: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                      ),
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        ttp.saveTimetableTourSeen(true);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: Text(
+                              steps[step]['body'] as String,
+                              style: theme.textTheme.bodyMedium,
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.tour, color: Colors.white),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Tour guidé — ${steps[step]['title']}',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              children: List.generate(steps.length, (i) {
+                                final active = i == step;
+                                return Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  width: active ? 12 : 8,
+                                  height: active ? 12 : 8,
+                                  decoration: BoxDecoration(
+                                    color: active
+                                        ? theme.colorScheme.primary
+                                        : theme.dividerColor.withOpacity(0.6),
+                                    shape: BoxShape.circle,
                                   ),
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Ignorer le tour',
-                                icon: const Icon(Icons.close, color: Colors.white),
-                                onPressed: () {
-                                  Navigator.of(context).pop();
-                                  ttp.saveTimetableTourSeen(true);
-                                },
-                              ),
-                            ],
+                                );
+                              }),
+                            ),
                           ),
-                        );
-                      }),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        child: Text(
-                          steps[step]['body'] as String,
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: List.generate(steps.length, (i) {
-                            final active = i == step;
-                            return Container(
-                              margin: const EdgeInsets.only(right: 6),
-                              width: active ? 12 : 8,
-                              height: active ? 12 : 8,
-                              decoration: BoxDecoration(
-                                color: active ? theme.colorScheme.primary : theme.dividerColor.withOpacity(0.6),
-                                shape: BoxShape.circle,
-                              ),
-                            );
-                          }),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Étape ${step + 1}/${steps.length}', style: theme.textTheme.bodySmall),
-                            Row(
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                    ttp.saveTimetableTourSeen(true);
-                                  },
-                                  child: const Text('Ignorer'),
+                                Text(
+                                  'Étape ${step + 1}/${steps.length}',
+                                  style: theme.textTheme.bodySmall,
                                 ),
-                                const SizedBox(width: 8),
-                                if (step > 0)
-                                  OutlinedButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                      step -= 1;
-                                      Future.microtask(showStep);
-                                    },
-                                    child: const Text('Précédent'),
-                                  ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                    step += 1;
-                                    if (step < steps.length) {
-                                      Future.microtask(showStep);
-                                    } else {
-                                      ttp.saveTimetableTourSeen(true);
-                                    }
-                                  },
-                                  child: Text(step < steps.length - 1 ? 'Suivant' : 'Terminer'),
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        ttp.saveTimetableTourSeen(true);
+                                      },
+                                      child: const Text('Ignorer'),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (step > 0)
+                                      OutlinedButton(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          step -= 1;
+                                          Future.microtask(showStep);
+                                        },
+                                        child: const Text('Précédent'),
+                                      ),
+                                    const SizedBox(width: 8),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        step += 1;
+                                        if (step < steps.length) {
+                                          Future.microtask(showStep);
+                                        } else {
+                                          ttp.saveTimetableTourSeen(true);
+                                        }
+                                      },
+                                      child: Text(
+                                        step < steps.length - 1
+                                            ? 'Suivant'
+                                            : 'Terminer',
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
             ],
           );
         },
@@ -4463,6 +4990,7 @@ class _TimetablePageState extends State<TimetablePage>
             ),
           );
         }
+
         Widget tag(String text, Color color) {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -4497,8 +5025,9 @@ class _TimetablePageState extends State<TimetablePage>
                 decoration: BoxDecoration(
                   color: theme.cardColor,
                   borderRadius: BorderRadius.circular(16),
-                  border:
-                      Border.all(color: theme.dividerColor.withOpacity(0.2)),
+                  border: Border.all(
+                    color: theme.dividerColor.withOpacity(0.2),
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: theme.shadowColor.withOpacity(0.08),
@@ -4510,508 +5039,833 @@ class _TimetablePageState extends State<TimetablePage>
                 child: SingleChildScrollView(
                   padding: EdgeInsets.zero,
                   child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header with accent
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Theme.of(context).colorScheme.primary,
-                            Theme.of(context).colorScheme.secondary,
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header with accent
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Theme.of(context).colorScheme.primary,
+                              Theme.of(context).colorScheme.secondary,
+                            ],
+                          ),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.help_outline, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Aide — Emploi du temps',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                              ),
+                              tooltip: 'Fermer',
+                            ),
                           ],
                         ),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          topRight: Radius.circular(16),
-                        ),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.help_outline, color: Colors.white),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Aide — Emploi du temps',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
+                      // Sections descriptives des éléments de l'écran
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.switch_account, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Vue et filtres',
+                              style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            icon: const Icon(Icons.close, color: Colors.white),
-                            tooltip: 'Fermer',
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Sections descriptives des éléments de l'écran
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.switch_account, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Vue et filtres', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Bascule Classe/Enseignant: change la perspective d\'affichage.'),
-                          Text('• Sélecteur Classe/Enseignant: filtre la vue actuelle selon la sélection.'),
-                          Text('• Recherche: filtre en direct (classe, enseignant, matière, salle).'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.build_circle, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Barre d\'actions', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Ajouter un cours: ouvre la fenêtre de création/édition.'),
-                          Text('• Exporter PDF/Excel: exporte la vue filtrée (classe/enseignant).'),
-                          Text('• Zoom: ajuster l\'échelle de la grille; Réinitialiser: revenir à 100%.'),
-                          Text('• Résumés: afficher/masquer les pastilles de cumul (matières, professeurs, jours).'),
-                          Text('• Liste des classes: afficher/masquer le panneau latéral; redimensionnable.'),
-                          Text('• Plein écran: maximise l\'espace visible (barre d\'outils accessible en haut‑droite).'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.grid_on, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Grille d\'emploi du temps', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Colonnes = jours, lignes = créneaux; les pauses sont grisées.'),
-                          Text('• Glisser‑déposer un cours pour le déplacer; la durée reste constante.'),
-                          Text('• Conflits détectés: salle occupée, indisponibilité enseignant, chevauchements.'),
-                          Text('• Couleur matière: repère visuel cohérent avec la Palette.'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.summarize, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Résumés (pastilles)', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Classe: cumul par matière et par professeur (hebdo).'),
-                          Text('• Classe & Enseignant: cumul par jour.'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.palette_outlined, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Palette des matières', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Glisser une matière vers la grille pour ajouter un cours au créneau.'),
-                          Text('• L\'enseignant proposé dépend des affectations matière/classe.'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.view_sidebar, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Panneau des classes', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Liste des classes (vue Classe) — clic pour changer de classe.'),
-                          Text('• Redimension: glisser la barre verticale; masquable via la barre d\'outils.'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.auto_mode, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Auto‑génération & indisponibilités', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('• Onglet Paramètres: configurer jours, créneaux, pauses et générer pour classes/enseignants.'),
-                          Text('• Vue Enseignant: Indisponibilités pour marquer les créneaux non disponibles.'),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(color: theme.dividerColor.withOpacity(0.3)),
-                    ),
-                    // Fin des sections descriptives
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                      child: Text(
-                        'Cet écran permet de créer et gérer les emplois du temps par classe et par enseignant. '
-                        'Utilisez la barre d’outils pour zoomer, passer en plein écran, afficher les résumés, ou masquer la liste des classes.',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withOpacity(0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: theme.colorScheme.primary.withOpacity(0.3)),
+                          ],
                         ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Bascule Classe/Enseignant: change la perspective d\'affichage.',
+                            ),
+                            Text(
+                              '• Sélecteur Classe/Enseignant: filtre la vue actuelle selon la sélection.',
+                            ),
+                            Text(
+                              '• Recherche: filtre en direct (classe, enseignant, matière, salle).',
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
                           children: [
-                            Row(
-                              children: [
-                                Icon(Icons.rocket_launch, size: 18, color: theme.colorScheme.primary),
-                                const SizedBox(width: 6),
-                                Text('Guide rapide', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                              ],
+                            const Icon(Icons.build_circle, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Barre d\'actions',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            // Rangée 1: vrais boutons principaux
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                // Ajouter un cours (même style que l'en-tête)
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () { Navigator.of(context).pop(); _showAddEditTimetableEntryDialog(); },
-                                      icon: const Icon(Icons.add, color: Colors.white),
-                                      label: const Text('Ajouter un cours', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primaryBlue,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    tag('Créer rapidement un nouveau cours', AppColors.primaryBlue),
-                                  ],
-                                ),
-                                // Export PDF (même style que l'en-tête)
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () { Navigator.of(context).pop(); _exportTimetableToPdf(exportBy: _isClassView ? 'class' : 'teacher'); },
-                                      icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-                                      label: const Text('Exporter PDF', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    tag('Exporter la vue en PDF', Colors.red),
-                                  ],
-                                ),
-                                // Export Excel (même style que l'en-tête)
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () { Navigator.of(context).pop(); _exportTimetableToExcel(exportBy: _isClassView ? 'class' : 'teacher'); },
-                                      icon: const Icon(Icons.grid_on, color: Colors.white),
-                                      label: const Text('Exporter Excel', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    tag('Exporter la vue en Excel', Colors.green),
-                                  ],
-                                ),
-                              ],
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Ajouter un cours: ouvre la fenêtre de création/édition.',
                             ),
-                            const SizedBox(height: 10),
-                            // Rangée 2: actions d'automatisation et de configuration
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async {
-                                        Navigator.of(context).pop();
-                                        if (_isClassView) {
-                                          await _autoGenerateForSelectedClass();
-                                        } else {
-                                          await _autoGenerateForSelectedTeacher();
-                                        }
-                                      },
-                                      icon: const Icon(Icons.auto_mode, color: Colors.white),
-                                      label: const Text('Auto‑générer', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.teal,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
+                            Text(
+                              '• Exporter PDF/Excel: exporte la vue filtrée (classe/enseignant).',
+                            ),
+                            Text(
+                              '• Zoom: ajuster l\'échelle de la grille; Réinitialiser: revenir à 100%.',
+                            ),
+                            Text(
+                              '• Résumés: afficher/masquer les pastilles de cumul (matières, professeurs, jours).',
+                            ),
+                            Text(
+                              '• Liste des classes: afficher/masquer le panneau latéral; redimensionnable.',
+                            ),
+                            Text(
+                              '• Plein écran: maximise l\'espace visible (barre d\'outils accessible en haut‑droite).',
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.grid_on, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Grille d\'emploi du temps',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Colonnes = jours, lignes = créneaux; les pauses sont grisées.',
+                            ),
+                            Text(
+                              '• Glisser‑déposer un cours pour le déplacer; la durée reste constante.',
+                            ),
+                            Text(
+                              '• Conflits détectés: salle occupée, indisponibilité enseignant, chevauchements.',
+                            ),
+                            Text(
+                              '• Couleur matière: repère visuel cohérent avec la Palette.',
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.summarize, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Résumés (pastilles)',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Classe: cumul par matière et par professeur (hebdo).',
+                            ),
+                            Text('• Classe & Enseignant: cumul par jour.'),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.palette_outlined, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Palette des matières',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Glisser une matière vers la grille pour ajouter un cours au créneau.',
+                            ),
+                            Text(
+                              '• L\'enseignant proposé dépend des affectations matière/classe.',
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.view_sidebar, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Panneau des classes',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Liste des classes (vue Classe) — clic pour changer de classe.',
+                            ),
+                            Text(
+                              '• Redimension: glisser la barre verticale; masquable via la barre d\'outils.',
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_mode, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Auto‑génération & indisponibilités',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              '• Onglet Paramètres: configurer jours, créneaux, pauses et générer pour classes/enseignants.',
+                            ),
+                            Text(
+                              '• Vue Enseignant: Indisponibilités pour marquer les créneaux non disponibles.',
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Divider(
+                          color: theme.dividerColor.withOpacity(0.3),
+                        ),
+                      ),
+                      // Fin des sections descriptives
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                        child: Text(
+                          'Cet écran permet de créer et gérer les emplois du temps par classe et par enseignant. '
+                          'Utilisez la barre d’outils pour zoomer, passer en plein écran, afficher les résumés, ou masquer la liste des classes.',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withOpacity(0.06),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.rocket_launch,
+                                    size: 18,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Guide rapide',
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
                                     ),
-                                    const SizedBox(height: 4),
-                                    tag('Remplir automatiquement sans conflit', Colors.teal),
-                                  ],
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () { Navigator.of(context).pop(); setState(() { _tabController.index = 0; }); },
-                                      icon: const Icon(Icons.tune, color: Colors.white),
-                                      label: const Text('Paramètres', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.orange,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    tag('Configurer jours, créneaux, pauses', Colors.orange),
-                                  ],
-                                ),
-                                if (!_isClassView)
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              // Rangée 1: vrais boutons principaux
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  // Ajouter un cours (même style que l'en-tête)
                                   Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       ElevatedButton.icon(
-                                        onPressed: () async { Navigator.of(context).pop(); await _showTeacherUnavailabilityDialog(); },
-                                        icon: const Icon(Icons.event_busy, color: Colors.white),
-                                        label: const Text('Indisponibilités', style: TextStyle(color: Colors.white)),
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          _showAddEditTimetableEntryDialog();
+                                        },
+                                        icon: const Icon(
+                                          Icons.add,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Ajouter un cours',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.deepPurple,
+                                          backgroundColor:
+                                              AppColors.primaryBlue,
                                           foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 4),
-                                      tag('Marquer les créneaux non disponibles', Colors.deepPurple),
+                                      tag(
+                                        'Créer rapidement un nouveau cours',
+                                        AppColors.primaryBlue,
+                                      ),
                                     ],
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            // Rangée 3: génération globale & nettoyage
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async { Navigator.of(context).pop(); await _onGenerateForAllClasses(); },
-                                      icon: const Icon(Icons.apartment, color: Colors.white),
-                                      label: const Text('Générer toutes les classes', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primaryBlue,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  // Export PDF (même style que l'en-tête)
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          _exportTimetableToPdf(
+                                            exportBy: _isClassView
+                                                ? 'class'
+                                                : 'teacher',
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.picture_as_pdf,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Exporter PDF',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    tag('Génération pour l’ensemble des classes', AppColors.primaryBlue),
-                                  ],
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async { Navigator.of(context).pop(); await _onGenerateForAllTeachers(); },
-                                      icon: const Icon(Icons.groups, color: Colors.white),
-                                      label: const Text('Générer tous les enseignants', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.successGreen,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      const SizedBox(height: 4),
+                                      tag('Exporter la vue en PDF', Colors.red),
+                                    ],
+                                  ),
+                                  // Export Excel (même style que l'en-tête)
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          _exportTimetableToExcel(
+                                            exportBy: _isClassView
+                                                ? 'class'
+                                                : 'teacher',
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.grid_on,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Exporter Excel',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    tag('Génération pour tous les professeurs', AppColors.successGreen),
-                                  ],
-                                ),
-                                Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async { Navigator.of(context).pop(); await _onClearTimetable(); },
-                                      icon: const Icon(Icons.clear_all, color: Colors.white),
-                                      label: const Text('Restaurer à vierge', style: TextStyle(color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      const SizedBox(height: 4),
+                                      tag(
+                                        'Exporter la vue en Excel',
+                                        Colors.green,
                                       ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              // Rangée 2: actions d'automatisation et de configuration
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          Navigator.of(context).pop();
+                                          if (_isClassView) {
+                                            await _autoGenerateForSelectedClass();
+                                          } else {
+                                            await _autoGenerateForSelectedTeacher();
+                                          }
+                                        },
+                                        icon: const Icon(
+                                          Icons.auto_mode,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Auto‑générer',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.teal,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      tag(
+                                        'Remplir automatiquement sans conflit',
+                                        Colors.teal,
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () {
+                                          Navigator.of(context).pop();
+                                          setState(() {
+                                            _tabController.index = 0;
+                                          });
+                                        },
+                                        icon: const Icon(
+                                          Icons.tune,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Paramètres',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.orange,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      tag(
+                                        'Configurer jours, créneaux, pauses',
+                                        Colors.orange,
+                                      ),
+                                    ],
+                                  ),
+                                  if (!_isClassView)
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        ElevatedButton.icon(
+                                          onPressed: () async {
+                                            Navigator.of(context).pop();
+                                            await _showTeacherUnavailabilityDialog();
+                                          },
+                                          icon: const Icon(
+                                            Icons.event_busy,
+                                            color: Colors.white,
+                                          ),
+                                          label: const Text(
+                                            'Indisponibilités',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.deepPurple,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 16,
+                                              vertical: 10,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        tag(
+                                          'Marquer les créneaux non disponibles',
+                                          Colors.deepPurple,
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    tag('Supprimer tous les cours du tableau', Colors.red),
-                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              // Rangée 3: génération globale & nettoyage
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          Navigator.of(context).pop();
+                                          await _onGenerateForAllClasses();
+                                        },
+                                        icon: const Icon(
+                                          Icons.apartment,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Générer toutes les classes',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.primaryBlue,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      tag(
+                                        'Génération pour l’ensemble des classes',
+                                        AppColors.primaryBlue,
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          Navigator.of(context).pop();
+                                          await _onGenerateForAllTeachers();
+                                        },
+                                        icon: const Icon(
+                                          Icons.groups,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Générer tous les enseignants',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.successGreen,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      tag(
+                                        'Génération pour tous les professeurs',
+                                        AppColors.successGreen,
+                                      ),
+                                    ],
+                                  ),
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          Navigator.of(context).pop();
+                                          await _onClearTimetable();
+                                        },
+                                        icon: const Icon(
+                                          Icons.clear_all,
+                                          color: Colors.white,
+                                        ),
+                                        label: const Text(
+                                          'Restaurer à vierge',
+                                          style: TextStyle(color: Colors.white),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 16,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      tag(
+                                        'Supprimer tous les cours du tableau',
+                                        Colors.red,
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              // Bouton pour démarrer le tour guidé
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    _startTimetableTour();
+                                  },
+                                  icon: const Icon(Icons.tour),
+                                  label: const Text('Démarrer le tour guidé'),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            // Bouton pour démarrer le tour guidé
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: OutlinedButton.icon(
-                                onPressed: () { Navigator.of(context).pop(); _startTimetableTour(); },
-                                icon: const Icon(Icons.tour),
-                                label: const Text('Démarrer le tour guidé'),
+                              ),
+                              const SizedBox(height: 10),
+                              // Aperçu des contrôles d'affichage réels
+                              Text(
+                                'Contrôles d\'affichage',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              _buildViewControls(context),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Zoom, reset, résumés, liste des classes, plein écran',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Divider(
+                          color: theme.dividerColor.withOpacity(0.3),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.keyboard, size: 18),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Raccourcis clavier',
+                                        style: theme.textTheme.titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 10,
+                                    runSpacing: 8,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      kbd('= / +'),
+                                      Text(
+                                        'Zoom +',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                      kbd('-'),
+                                      Text(
+                                        'Zoom −',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                      kbd('F'),
+                                      Text(
+                                        'Plein écran',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                      kbd('0'),
+                                      Text(
+                                        'Réinitialiser la vue',
+                                        style: theme.textTheme.bodySmall,
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 10),
-                            // Aperçu des contrôles d'affichage réels
-                            Text('Contrôles d\'affichage', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 6),
-                            _buildViewControls(context),
-                            const SizedBox(height: 4),
-                            Text('Zoom, reset, résumés, liste des classes, plein écran', style: theme.textTheme.bodySmall),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.tips_and_updates,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Astuces',
+                                        style: theme.textTheme.titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: const [
+                                      Text(
+                                        '• Glisser la barre verticale pour redimensionner la liste des classes.',
+                                      ),
+                                      Text(
+                                        '• Les préférences d’affichage (zoom, liste, résumés) sont mémorisées.',
+                                      ),
+                                      Text(
+                                        '• En plein écran, la barre d’outils reste accessible en haut à droite.',
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(color: theme.dividerColor.withOpacity(0.3)),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.keyboard, size: 18),
-                                    const SizedBox(width: 6),
-                                    Text('Raccourcis clavier', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 10,
-                                  runSpacing: 8,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    kbd('= / +'), Text('Zoom +', style: theme.textTheme.bodySmall),
-                                    kbd('-'), Text('Zoom −', style: theme.textTheme.bodySmall),
-                                    kbd('F'), Text('Plein écran', style: theme.textTheme.bodySmall),
-                                    kbd('0'), Text('Réinitialiser la vue', style: theme.textTheme.bodySmall),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Icon(Icons.tips_and_updates, size: 18),
-                                    const SizedBox(width: 6),
-                                    Text('Astuces', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: const [
-                                    Text('• Glisser la barre verticale pour redimensionner la liste des classes.'),
-                                    Text('• Les préférences d’affichage (zoom, liste, résumés) sont mémorisées.'),
-                                    Text('• En plein écran, la barre d’outils reste accessible en haut à droite.'),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -5069,10 +5923,15 @@ class _TimetablePageState extends State<TimetablePage>
       title: title,
     );
 
+    final safeLabel = PdfService.sanitizeFileName(classLabel);
+    final safeTeacher = PdfService.sanitizeFileName(
+      _selectedTeacherFilter ?? 'inconnu',
+    );
     final fileName = exportBy == 'class'
-        ? 'emploi du temps de la classe $classLabel.pdf'
-        : 'emploi du temps du professeur(e) ${_selectedTeacherFilter ?? ''}.pdf';
+        ? 'emploi_du_temps_classe_$safeLabel.pdf'
+        : 'emploi_du_temps_prof_$safeTeacher.pdf';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(bytes);
     OpenFile.open(file.path);
   }
@@ -5168,10 +6027,15 @@ class _TimetablePageState extends State<TimetablePage>
       }
     }
 
+    final safeLabel = PdfService.sanitizeFileName(classLabel);
+    final safeTeacher = PdfService.sanitizeFileName(
+      _selectedTeacherFilter ?? 'inconnu',
+    );
     final fileName = exportBy == 'class'
-        ? 'emploi du temps de la classe $classLabel.xlsx'
-        : 'emploi du temps du professeur(e) ${_selectedTeacherFilter ?? ''}.xlsx';
+        ? 'emploi_du_temps_classe_$safeLabel.xlsx'
+        : 'emploi_du_temps_prof_$safeTeacher.xlsx';
     final file = File('$directory/$fileName');
+    await PdfService.ensureParentDirectory(file);
     final bytes = excel.encode();
     if (bytes != null) {
       await file.writeAsBytes(bytes);
@@ -5215,14 +6079,16 @@ class _ClassMultiSelectState extends State<_ClassMultiSelect> {
     List<Class> items = List<Class>.from(widget.allClasses);
     if (_search.isNotEmpty) {
       items = items
-          .where((c) =>
-              c.name.toLowerCase().contains(_search.toLowerCase()) ||
-              (c.academicYear).toLowerCase().contains(_search.toLowerCase()))
+          .where(
+            (c) =>
+                c.name.toLowerCase().contains(_search.toLowerCase()) ||
+                (c.academicYear).toLowerCase().contains(_search.toLowerCase()),
+          )
           .toList();
     }
-    items.sort((a, b) => _asc
-        ? a.name.compareTo(b.name)
-        : b.name.compareTo(a.name));
+    items.sort(
+      (a, b) => _asc ? a.name.compareTo(b.name) : b.name.compareTo(a.name),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -5243,8 +6109,9 @@ class _ClassMultiSelectState extends State<_ClassMultiSelect> {
               icon: Icon(_asc ? Icons.sort_by_alpha : Icons.sort),
             ),
             TextButton(
-              onPressed: () => setState(() => _selected =
-                  widget.allClasses.map(widget.toKey).toSet()),
+              onPressed: () => setState(
+                () => _selected = widget.allClasses.map(widget.toKey).toSet(),
+              ),
               child: const Text('Tout sélectionner'),
             ),
             TextButton(
@@ -5276,8 +6143,10 @@ class _ClassMultiSelectState extends State<_ClassMultiSelect> {
                       }
                     });
                   },
-                  title: Text('${c.name} (${c.academicYear})',
-                      style: theme.textTheme.bodyMedium),
+                  title: Text(
+                    '${c.name} (${c.academicYear})',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,
                 );
@@ -5316,13 +6185,21 @@ class _SpotlightPainter extends CustomPainter {
   final Rect target;
   final Color color;
   final double radius;
-  _SpotlightPainter({required this.target, required this.color, this.radius = 12});
+  _SpotlightPainter({
+    required this.target,
+    required this.color,
+    this.radius = 12,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..blendMode = BlendMode.srcOver;
+    final paint = Paint()
+      ..color = color
+      ..blendMode = BlendMode.srcOver;
     final background = Path()..addRect(Offset.zero & size);
-    final rect = target.isEmpty ? Rect.fromLTWH(size.width / 2 - 40, size.height / 3, 80, 80) : target;
+    final rect = target.isEmpty
+        ? Rect.fromLTWH(size.width / 2 - 40, size.height / 3, 80, 80)
+        : target;
     final hole = Path()
       ..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
     final diff = Path.combine(PathOperation.difference, background, hole);
@@ -5331,6 +6208,8 @@ class _SpotlightPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SpotlightPainter oldDelegate) {
-    return oldDelegate.target != target || oldDelegate.color != color || oldDelegate.radius != radius;
+    return oldDelegate.target != target ||
+        oldDelegate.color != color ||
+        oldDelegate.radius != radius;
   }
 }

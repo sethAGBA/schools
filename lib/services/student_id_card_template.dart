@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/models/student.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StudentIdCardTemplate {
@@ -21,21 +22,9 @@ class StudentIdCardTemplate {
   }) async {
     final pdf = pw.Document();
 
-    pw.Font fontRegular;
-    pw.Font fontBold;
-    try {
-      final regularData = await rootBundle.load(
-        'assets/fonts/nunito/Nunito-Regular.ttf',
-      );
-      final boldData = await rootBundle.load(
-        'assets/fonts/nunito/Nunito-Bold.ttf',
-      );
-      fontRegular = pw.Font.ttf(regularData);
-      fontBold = pw.Font.ttf(boldData);
-    } catch (_) {
-      fontRegular = await pw.Font.helvetica();
-      fontBold = await pw.Font.helveticaBold();
-    }
+    final fonts = await PdfService.loadPdfFonts();
+    final fontRegular = fonts.regular;
+    final fontBold = fonts.bold;
 
     final primary = PdfColor.fromHex('#111827');
     final accent = PdfColor.fromHex('#2563EB');

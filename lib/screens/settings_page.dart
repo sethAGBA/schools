@@ -56,6 +56,7 @@ class _SettingsPageState extends State<SettingsPage>
   final _educationDirectionController = TextEditingController();
   final _inspectionController = TextEditingController();
   final _reportFooterController = TextEditingController();
+  final _sloganController = TextEditingController();
 
   // Focus nodes pour l'accessibilité
   late FocusNode _etablissementFocusNode;
@@ -78,6 +79,7 @@ class _SettingsPageState extends State<SettingsPage>
   late FocusNode _educationDirectionFocusNode;
   late FocusNode _inspectionFocusNode;
   late FocusNode _reportFooterFocusNode;
+  late FocusNode _sloganFocusNode;
 
   String? _logoPath;
   String? _flagPath;
@@ -144,6 +146,7 @@ class _SettingsPageState extends State<SettingsPage>
     _educationDirectionFocusNode = FocusNode();
     _inspectionFocusNode = FocusNode();
     _reportFooterFocusNode = FocusNode();
+    _sloganFocusNode = FocusNode();
 
     _loadSchoolSettings();
     _academicYearController.text = _academicYear;
@@ -174,6 +177,7 @@ class _SettingsPageState extends State<SettingsPage>
     _educationDirectionController.dispose();
     _inspectionController.dispose();
     _reportFooterController.dispose();
+    _sloganController.dispose();
 
     _etablissementFocusNode.dispose();
     _adresseFocusNode.dispose();
@@ -195,6 +199,7 @@ class _SettingsPageState extends State<SettingsPage>
     _educationDirectionFocusNode.dispose();
     _inspectionFocusNode.dispose();
     _reportFooterFocusNode.dispose();
+    _sloganFocusNode.dispose();
     _academicYearController.dispose();
     super.dispose();
   }
@@ -229,8 +234,9 @@ class _SettingsPageState extends State<SettingsPage>
           prefs.getString('school_education_direction') ?? '';
       _inspectionController.text = prefs.getString('school_inspection') ?? '';
       _reportFooterController.text =
-          prefs.getString('report_card_footer_note') ??
-          PdfService.defaultReportFooterNote;
+          prefs.getString('report_card_footer_note') ?? '';
+      _sloganController.text =
+          prefs.getString('school_slogan') ?? PdfService.defaultReportFooterNote;
       _logoPath = prefs.getString('school_logo');
       _flagPath = prefs.getString('school_flag');
       _isDarkMode = prefs.getBool('dark_mode') ?? false;
@@ -329,6 +335,7 @@ class _SettingsPageState extends State<SettingsPage>
       'report_card_footer_note',
       _reportFooterController.text.trim(),
     );
+    await prefs.setString('school_slogan', _sloganController.text.trim());
     await prefs.setBool('dark_mode', _isDarkMode);
     await prefs.setBool('notifications', _notificationsEnabled);
     await prefs.setBool('biometric', _biometricEnabled);
@@ -368,6 +375,7 @@ class _SettingsPageState extends State<SettingsPage>
         republicMotto: _republicMottoController.text.trim(),
         educationDirection: _educationDirectionController.text.trim(),
         inspection: _inspectionController.text.trim(),
+        slogan: _sloganController.text.trim(),
       );
       await DatabaseService().insertSchoolInfo(info);
     } catch (_) {}
@@ -925,9 +933,12 @@ class _SettingsPageState extends State<SettingsPage>
           .toIso8601String()
           .replaceAll(':', '-')
           .replaceAll('.', '-');
-      final backupPath = '$dirPath/school_backup_$timestamp.db';
+      final fileName = 'school_backup_$timestamp.db';
+      final backupPath = '$dirPath/$fileName';
+      final file = File(backupPath);
+      await PdfService.ensureParentDirectory(file);
       await dbFile.copy(backupPath);
-      _showModernSnackBar('Sauvegarde créée : ${backupPath.split('/').last}');
+      _showModernSnackBar('Sauvegarde créée : $fileName');
     } catch (e) {
       _showModernSnackBar('Erreur lors de la sauvegarde : $e', isError: true);
     }
@@ -995,9 +1006,9 @@ class _SettingsPageState extends State<SettingsPage>
                 .map((s) => {'student': s, 'classe': null})
                 .toList(),
           );
-          final file = File(
-            '$dirPath/export_eleves_${DateTime.now().millisecondsSinceEpoch}.pdf',
-          );
+          final fileName = 'export_eleves_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final file = File('$dirPath/$fileName');
+          await PdfService.ensureParentDirectory(file);
           await file.writeAsBytes(pdfBytes);
           generatedFiles.add(file.path);
           if (format == 'ZIP') filesToZip.add(file);
@@ -1005,9 +1016,9 @@ class _SettingsPageState extends State<SettingsPage>
         if (classes.isNotEmpty) {
           // Génération PDF classes (simple)
           final pdf = await PdfService.exportClassesListPdf(classes: classes);
-          final file = File(
-            '$dirPath/export_classes_${DateTime.now().millisecondsSinceEpoch}.pdf',
-          );
+          final fileName = 'export_classes_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final file = File('$dirPath/$fileName');
+          await PdfService.ensureParentDirectory(file);
           await file.writeAsBytes(pdf);
           generatedFiles.add(file.path);
           if (format == 'ZIP') filesToZip.add(file);
@@ -1030,9 +1041,9 @@ class _SettingsPageState extends State<SettingsPage>
               )
               .toList();
           final pdfBytes = await PdfService.exportPaymentsListPdf(rows: rows);
-          final file = File(
-            '$dirPath/export_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf',
-          );
+          final fileName = 'export_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final file = File('$dirPath/$fileName');
+          await PdfService.ensureParentDirectory(file);
           await file.writeAsBytes(pdfBytes);
           generatedFiles.add(file.path);
           if (format == 'ZIP') filesToZip.add(file);
@@ -1060,7 +1071,7 @@ class _SettingsPageState extends State<SettingsPage>
             ...students.map(
               (s) => [
                 s.id,
-                '${s.firstName} ${s.lastName}'.trim(),
+                '${s.lastName} ${s.firstName}'.trim(),
                 s.dateOfBirth,
                 s.address,
                 s.gender,
@@ -1076,9 +1087,9 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ];
           final csvStr = const ListToCsvConverter().convert(csvRows);
-          final file = File(
-            '$dirPath/export_eleves_${DateTime.now().millisecondsSinceEpoch}.csv',
-          );
+          final fileName = 'export_eleves_${DateTime.now().millisecondsSinceEpoch}.csv';
+          final file = File('$dirPath/$fileName');
+          await PdfService.ensureParentDirectory(file);
           await file.writeAsString(csvStr);
           generatedFiles.add(file.path);
           if (format == 'ZIP') filesToZip.add(file);
@@ -1103,9 +1114,9 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ];
           final csvStr = const ListToCsvConverter().convert(csvRows);
-          final file = File(
-            '$dirPath/export_classes_${DateTime.now().millisecondsSinceEpoch}.csv',
-          );
+          final fileName = 'export_classes_${DateTime.now().millisecondsSinceEpoch}.csv';
+          final file = File('$dirPath/$fileName');
+          await PdfService.ensureParentDirectory(file);
           await file.writeAsString(csvStr);
           generatedFiles.add(file.path);
           if (format == 'ZIP') filesToZip.add(file);
@@ -1136,9 +1147,9 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ];
           final csvStr = const ListToCsvConverter().convert(csvRows);
-          final file = File(
-            '$dirPath/export_paiements_${DateTime.now().millisecondsSinceEpoch}.csv',
-          );
+          final fileName = 'export_paiements_${DateTime.now().millisecondsSinceEpoch}.csv';
+          final file = File('$dirPath/$fileName');
+          await PdfService.ensureParentDirectory(file);
           await file.writeAsString(csvStr);
           generatedFiles.add(file.path);
           if (format == 'ZIP') filesToZip.add(file);
@@ -1147,8 +1158,10 @@ class _SettingsPageState extends State<SettingsPage>
       // ZIP
       if (format == 'ZIP' && filesToZip.isNotEmpty) {
         final encoder = ZipFileEncoder();
-        final zipPath =
-            '$dirPath/export_donnees_${DateTime.now().millisecondsSinceEpoch}.zip';
+        final zipFileName = 'export_donnees_${DateTime.now().millisecondsSinceEpoch}.zip';
+        final zipPath = '$dirPath/$zipFileName';
+        final zipFile = File(zipPath);
+        await PdfService.ensureParentDirectory(zipFile);
         encoder.create(zipPath);
         for (final file in filesToZip) {
           encoder.addFile(file);
@@ -1805,12 +1818,12 @@ class _SettingsPageState extends State<SettingsPage>
         dialogTitle: 'Choisissez un dossier de sauvegarde',
       );
       if (dirPath == null) return;
-      final file = File(
-        '$dirPath/statistiques_${DateTime.now().millisecondsSinceEpoch}.pdf',
-      );
+      final fileName = 'statistiques_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes);
       _showModernSnackBar(
-        'Statistiques exportées: ${file.path.split('/').last}',
+        'Statistiques exportées: $fileName',
       );
     } catch (e) {
       _showModernSnackBar('Erreur export statistiques: $e', isError: true);
@@ -2664,6 +2677,13 @@ class _SettingsPageState extends State<SettingsPage>
             'title': 'Bulletins et PDF',
             'icon': Icons.picture_as_pdf_outlined,
             'children': [
+              _buildModernTextField(
+                controller: _sloganController,
+                focusNode: _sloganFocusNode,
+                label: 'Slogan de l\'école',
+                prefixIcon: Icons.auto_awesome,
+                textInputAction: TextInputAction.next,
+              ),
               _buildModernTextField(
                 controller: _reportFooterController,
                 focusNode: _reportFooterFocusNode,

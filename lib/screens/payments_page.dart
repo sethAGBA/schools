@@ -57,6 +57,7 @@ class _PaymentsPageState extends State<PaymentsPage>
   PaymentScheduleRule? _globalScheduleRule;
   Map<String, PaymentScheduleRule?> _scheduleRuleByClass = {};
   List<String> _years = [];
+  SchoolInfo? _schoolInfo;
 
   String _displayStudentName(Student student) {
     final lastName = student.lastName.trim();
@@ -191,6 +192,7 @@ class _PaymentsPageState extends State<PaymentsPage>
     final payments = await _dbService.getAllPayments();
     final students = await _dbService.getStudents();
     final classes = await _dbService.getClasses();
+    final schoolInfo = await loadSchoolInfo();
     final years = classes.map((c) => c.academicYear).toSet().toList()..sort();
 
     final currentAcademicYear = await getCurrentAcademicYear();
@@ -246,6 +248,7 @@ class _PaymentsPageState extends State<PaymentsPage>
       _years = years;
       _isLoading = false;
       _currentPage = 0;
+      _schoolInfo = schoolInfo;
     });
 
     final adjByStudent = <String, List<PaymentAdjustment>>{};
@@ -281,7 +284,15 @@ class _PaymentsPageState extends State<PaymentsPage>
 
   double _baseTotalDueForStudent(Student student) {
     final classe = _classesByName[student.className];
-    return (classe?.fraisEcole ?? 0) + (classe?.fraisCotisationParallele ?? 0);
+    double total = (classe?.ecolage ?? 0) + (classe?.fraisCotisationParallele ?? 0);
+    if (student.typeInscription == 'Nouvelle inscription') {
+      double regFee = (classe?.fraisInscription ?? 0);
+      if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
+        regFee = _schoolInfo!.registrationFees!;
+      }
+      total += regFee;
+    }
+    return total;
   }
 
   double _adjustedTotalDueForStudent(Student student) {
@@ -518,14 +529,15 @@ class _PaymentsPageState extends State<PaymentsPage>
                           await PdfService.generatePaymentRemindersPdf(
                             rows: reminders,
                           );
-                      final file = File(
-                        '$dirPath/relances_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf',
-                      );
+                      final fileName =
+                          'relances_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf';
+                      final file = File('$dirPath/$fileName');
+                      await PdfService.ensureParentDirectory(file);
                       await file.writeAsBytes(bytes);
                       if (!mounted) return;
                       showSnackBar(
                         this.context,
-                        'Relances exportées: ${file.path}',
+                        'Relances exportées: $fileName',
                       );
                       try {
                         await OpenFile.open(file.path);
@@ -1968,6 +1980,14 @@ class _PaymentsPageState extends State<PaymentsPage>
   }
 
   void _showAddPaymentDialog(Student student, ThemeData theme) async {
+    final classe = _classesByName[student.className];
+    double regFee = 0;
+    if (student.typeInscription == 'Nouvelle inscription') {
+      regFee = (classe?.fraisInscription ?? 0);
+      if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
+        regFee = _schoolInfo!.registrationFees!;
+      }
+    }
     final double montantMax = _adjustedTotalDueForStudent(student);
     if (montantMax == 0) {
       showDialog(
@@ -2066,8 +2086,35 @@ class _PaymentsPageState extends State<PaymentsPage>
             const SizedBox(height: 8),
             Text(
               'Total dû (ajusté) : ${montantMax.toStringAsFixed(2)} FCFA',
-              style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+              style: TextStyle(
+                  color: theme.textTheme.bodyMedium?.color,
+                  fontWeight: FontWeight.bold),
             ),
+            if (regFee > 0) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      size: 16, color: theme.colorScheme.primary),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Frais d\'Inscription : ${regFee.toStringAsFixed(0)} FCFA',
+                    style: TextStyle(
+                        color: theme.colorScheme.primary, fontSize: 13),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      montantController.text = regFee.toStringAsFixed(0);
+                      commentController.text = 'Frais d\'inscription';
+                    },
+                    style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero, minimumSize: Size(0, 0)),
+                    child: const Text('Régler uniquement'),
+                  ),
+                ],
+              ),
+            ],
             Text(
               'Déjà payé : ${totalPaid.toStringAsFixed(2)} FCFA',
               style: TextStyle(color: theme.textTheme.bodyMedium?.color),
@@ -2634,8 +2681,15 @@ class _PaymentsPageState extends State<PaymentsPage>
     final totalPaid = allPayments
         .where((p) => !p.isCancelled)
         .fold(0.0, (sum, item) => sum + item.amount);
-    final totalDue =
-        (classe.fraisEcole ?? 0) + (classe.fraisCotisationParallele ?? 0);
+    double totalDue =
+        (classe.ecolage ?? 0) + (classe.fraisCotisationParallele ?? 0);
+    if (student.typeInscription == 'Nouvelle inscription') {
+      double regFee = (classe.fraisInscription ?? 0);
+      if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
+        regFee = _schoolInfo!.registrationFees!;
+      }
+      totalDue += regFee;
+    }
 
     final schoolInfo = await loadSchoolInfo();
     final pdfBytes = await PdfService.generatePaymentReceiptPdf(
@@ -2656,9 +2710,14 @@ class _PaymentsPageState extends State<PaymentsPage>
         final receiptNo = (p.receiptNo ?? '').trim().isNotEmpty
             ? p.receiptNo!.trim()
             : (p.id?.toString() ?? p.date.hashCode.toString());
+        final safeStudentName = PdfService.sanitizeFileName(student.name);
         final fileName =
-            'Recu_Paiement_${receiptNo}_${student.name.replaceAll(' ', '_')}_${p.date.substring(0, 10)}.pdf';
+            PdfService.sanitizeFileName('Recu_Paiement_${receiptNo}_$safeStudentName') +
+                '_' +
+                p.date.substring(0, 10).replaceAll('-', '') +
+                '.pdf';
         final file = File('$directoryPath/$fileName');
+        await PdfService.ensureParentDirectory(file);
         await file.writeAsBytes(pdfBytes);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2725,8 +2784,15 @@ class _PaymentsPageState extends State<PaymentsPage>
     final totalPaid = allPayments
         .where((p) => !p.isCancelled)
         .fold(0.0, (sum, item) => sum + item.amount);
-    final totalDue =
-        (classe.fraisEcole ?? 0) + (classe.fraisCotisationParallele ?? 0);
+    double totalDue =
+        (classe.ecolage ?? 0) + (classe.fraisCotisationParallele ?? 0);
+    if (student.typeInscription == 'Nouvelle inscription') {
+      double regFee = (classe.fraisInscription ?? 0);
+      if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
+        regFee = _schoolInfo!.registrationFees!;
+      }
+      totalDue += regFee;
+    }
 
     final schoolInfo = await loadSchoolInfo();
     final pdfBytes = await PdfService.generatePaymentTicketPdf(
@@ -2747,9 +2813,14 @@ class _PaymentsPageState extends State<PaymentsPage>
     final receiptNo = (p.receiptNo ?? '').trim().isNotEmpty
         ? p.receiptNo!.trim()
         : (p.id?.toString() ?? p.date.hashCode.toString());
+    final safeStudentName = PdfService.sanitizeFileName(student.name);
     final fileName =
-        'Ticket_Paiement_${receiptNo}_${student.name.replaceAll(' ', '_')}_${p.date.substring(0, 10)}.pdf';
+        PdfService.sanitizeFileName('Ticket_Paiement_${receiptNo}_$safeStudentName') +
+            '_' +
+            p.date.substring(0, 10).replaceAll('-', '') +
+            '.pdf';
     final file = File('$directoryPath/$fileName');
+    await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(pdfBytes);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -3031,9 +3102,10 @@ class _PaymentsPageState extends State<PaymentsPage>
         dialogTitle: 'Choisissez un dossier de sauvegarde',
       );
       if (dirPath == null) return;
-      final file = File(
-        '$dirPath/export_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf',
-      );
+      final fileName =
+          'export_paiements_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(pdfBytes);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3124,9 +3196,10 @@ class _PaymentsPageState extends State<PaymentsPage>
         dialogTitle: 'Choisissez un dossier de sauvegarde',
       );
       if (dirPath == null) return;
-      final file = File(
-        '$dirPath/export_paiements_${DateTime.now().millisecondsSinceEpoch}.xlsx',
-      );
+      final fileName =
+          'export_paiements_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(bytes);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3158,9 +3231,10 @@ class _PaymentsPageState extends State<PaymentsPage>
       );
       if (dirPath == null) return;
       final docx = await _generatePaymentsDocx(theme);
-      final file = File(
-        '$dirPath/export_paiements_${DateTime.now().millisecondsSinceEpoch}.docx',
-      );
+      final fileName =
+          'export_paiements_${DateTime.now().millisecondsSinceEpoch}.docx';
+      final file = File('$dirPath/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(docx);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

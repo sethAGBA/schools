@@ -5,6 +5,7 @@ import 'package:school_manager/models/grade.dart';
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/models/course.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:excel/excel.dart' hide Border;
@@ -559,8 +560,12 @@ class _StatisticsModalState extends State<StatisticsModal> {
     }
 
     // Save file
-    final path = '$directory/statistiques_${widget.className}.xlsx';
+    final safeClassName = widget.className?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'unknown';
+    final path = '$directory/statistiques_$safeClassName.xlsx';
     final file = File(path);
+    if (!await file.parent.exists()) {
+      await file.parent.create(recursive: true);
+    }
     await file.writeAsBytes(excel.encode()!);
 
     OpenFile.open(path);
@@ -571,18 +576,10 @@ class _StatisticsModalState extends State<StatisticsModal> {
     if (directory == null) return; // User canceled the picker
 
     final pdf = pw.Document();
-    final regularData = await rootBundle.load(
-      'assets/fonts/nunito/Nunito-Regular.ttf',
-    );
-    final boldData = await rootBundle.load(
-      'assets/fonts/nunito/Nunito-Bold.ttf',
-    );
-    final symbolsData = await rootBundle.load(
-      'assets/fonts/NotoSansSymbols2/NotoSansSymbols2-Regular.ttf',
-    );
-    final times = pw.Font.ttf(regularData);
-    final timesBold = pw.Font.ttf(boldData);
-    final symbolsFont = pw.Font.ttf(symbolsData);
+    final fonts = await PdfService.loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
+    final symbolsFont = fonts.symbols;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -883,8 +880,12 @@ class _StatisticsModalState extends State<StatisticsModal> {
       ),
     );
 
-    final path = '$directory/statistiques_${widget.className}.pdf';
+    final safeClassName = widget.className?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'unknown';
+    final path = '$directory/statistiques_$safeClassName.pdf';
     final file = File(path);
+    if (!await file.parent.exists()) {
+      await file.parent.create(recursive: true);
+    }
     await file.writeAsBytes(await pdf.save());
     OpenFile.open(path);
   }

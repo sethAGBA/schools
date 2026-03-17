@@ -113,6 +113,8 @@ flutter:
     - assets/fonts/nunito/Nunito-Regular.ttf
     - assets/fonts/nunito/Nunito-Bold.ttf
     - assets/fonts/NotoSansSymbols2/NotoSansSymbols2-Regular.ttf
+    - assets/fonts/Noto_Sans/NotoSans-Regular.ttf
+    - assets/fonts/Noto_Sans/NotoSans-Bold.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -130,4 +132,9 @@ flutter:
       fonts:
         - asset: assets/fonts/nunito/Nunito-Regular.ttf
         - asset: assets/fonts/nunito/Nunito-Bold.ttf
+          weight: 700
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/Noto_Sans/NotoSans-Regular.ttf
+        - asset: assets/fonts/Noto_Sans/NotoSans-Bold.ttf
           weight: 700

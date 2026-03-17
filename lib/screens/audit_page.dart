@@ -9,6 +9,7 @@ import 'package:open_file/open_file.dart';
 import 'package:flutter/services.dart';
 import 'package:school_manager/screens/students/student_profile_page.dart';
 import 'package:school_manager/screens/students/class_details_page.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
@@ -347,7 +348,9 @@ class _AuditPageState extends State<AuditPage> {
       final dir = await FilePicker.platform.getDirectoryPath();
       if (dir == null) return; // annulé
       final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final file = File('$dir/audit_$ts.csv');
+      final fileName = PdfService.sanitizeFileName('audit_$ts.csv');
+      final file = File('$dir/$fileName');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(utf8.encode(csv));
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1551,14 +1554,9 @@ class _AuditPageState extends State<AuditPage> {
     }
 
     final pdf = pw.Document();
-    final fontData = await rootBundle.load(
-      "assets/fonts/nunito/Nunito-Regular.ttf",
-    );
-    final fontBoldData = await rootBundle.load(
-      "assets/fonts/nunito/Nunito-Bold.ttf",
-    );
-    final ttf = pw.Font.ttf(fontData);
-    final ttfBold = pw.Font.ttf(fontBoldData);
+    final fonts = await PdfService.loadPdfFonts();
+    final ttf = fonts.regular;
+    final ttfBold = fonts.bold;
 
     pdf.addPage(
       pw.MultiPage(

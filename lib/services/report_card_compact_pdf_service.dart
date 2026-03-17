@@ -12,6 +12,7 @@ import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/models/signature.dart';
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/services/signature_pdf_service.dart';
 
@@ -201,8 +202,9 @@ class ReportCardCompactPdfService {
   }) async {
     _checkSafeMode(); // Vérifier le mode coffre fort
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final secondaryColor = PdfColors.blueGrey800;
     final mainColor = PdfColors.blue800;
     final tableHeaderBg = PdfColors.blue200;
@@ -420,20 +422,44 @@ class ReportCardCompactPdfService {
       pw.MultiPage(
         pageTheme: _pageTheme,
         footer: (context) {
-          if (resolvedFooterNote.isEmpty) return pw.SizedBox();
+          final slogan = (schoolInfo.slogan ?? '').trim();
+          final hasSlogan = slogan.isNotEmpty;
+          final hasNote = resolvedFooterNote.isNotEmpty;
+          if (!hasSlogan && !hasNote) return pw.SizedBox();
+
           return pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 4),
-            child: pw.Center(
-              child: pw.Text(
-                resolvedFooterNote,
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(
-                  font: timesBold,
-                  fontSize: footerFont,
-                  color: secondaryColor,
-                  fontStyle: pw.FontStyle.italic,
-                ),
-              ),
+            padding: const pw.EdgeInsets.only(top: 4, bottom: 4),
+            child: pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                if (hasSlogan)
+                  pw.Center(
+                    child: pw.Text(
+                      slogan,
+                      textAlign: pw.TextAlign.center,
+                      style: pw.TextStyle(
+                        font: times,
+                        fontSize: footerFont - 0.5,
+                        color: secondaryColor,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                if (hasSlogan && hasNote) pw.SizedBox(height: 2),
+                if (hasNote)
+                  pw.Center(
+                    child: pw.Text(
+                      resolvedFooterNote,
+                      textAlign: pw.TextAlign.center,
+                      style: pw.TextStyle(
+                        font: timesBold,
+                        fontSize: footerFont,
+                        color: secondaryColor,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           );
         },

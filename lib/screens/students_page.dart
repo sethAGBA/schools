@@ -14,6 +14,7 @@ import 'package:school_manager/screens/students/widgets/form_field.dart';
 import 'package:school_manager/screens/students/widgets/student_registration_form.dart';
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/screens/students/student_profile_page.dart';
+import 'package:school_manager/services/pdf_service.dart';
 import 'package:school_manager/services/database_service.dart';
 import 'package:school_manager/services/student_id_card_service.dart';
 import 'package:school_manager/utils/academic_year.dart';
@@ -21,7 +22,6 @@ import 'package:school_manager/screens/students/re_enrollment_batch_dialog.dart'
 import 'package:csv/csv.dart';
 import 'package:excel/excel.dart' as ex;
 import 'package:file_picker/file_picker.dart';
-import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import 'package:uuid/uuid.dart';
 
@@ -334,8 +334,9 @@ class _StudentsPageState extends State<StudentsPage> {
       if (dir == null) return;
 
       final year = _selectedYearFilter ?? _currentAcademicYear;
-      final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final file = File('$dir/eleves_${year}_$ts.csv');
+      final safeYear = PdfService.sanitizeFileName(year);
+      final file = File('$dir/eleves_${safeYear}.csv');
+      await PdfService.ensureParentDirectory(file);
 
       final rows = <List<dynamic>>[
         [
@@ -408,8 +409,9 @@ class _StudentsPageState extends State<StudentsPage> {
       if (dir == null) return;
 
       final year = _selectedYearFilter ?? _currentAcademicYear;
-      final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final file = File('$dir/eleves_${year}_$ts.xlsx');
+      final safeYear = PdfService.sanitizeFileName(year);
+      final file = File('$dir/liste_eleves_$safeYear.xlsx');
+      await PdfService.ensureParentDirectory(file);
 
       final excel = ex.Excel.createExcel();
       final sheet = excel['Élèves'];

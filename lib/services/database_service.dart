@@ -603,7 +603,8 @@ class DatabaseService {
             ministry TEXT,
             republicMotto TEXT,
             educationDirection TEXT,
-            inspection TEXT
+            inspection TEXT,
+            slogan TEXT
           )
         ''');
         await db.execute('''
@@ -750,9 +751,60 @@ class DatabaseService {
     await _ensureEvaluationTemplatesTermColumn(db);
     await _ensurePermissionGroupsTable(db);
     await _ensureUserSessionsTable(db);
+    await _ensureClassEcolageColumn(db);
+    await _ensureClassFraisInscriptionColumn(db);
+    await _ensureStudentTypeInscriptionColumn(db);
     debugPrint(
       '[DatabaseService][MIGRATION] All post-open migrations completed',
     );
+  }
+
+  Future<void> _ensureClassEcolageColumn(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(classes)');
+    final hasEcolage = cols.any((c) => c['name'] == 'ecolage');
+    final hasFraisEcole = cols.any((c) => c['name'] == 'fraisEcole');
+    
+    if (!hasEcolage) {
+      try {
+        await db.execute('ALTER TABLE classes ADD COLUMN ecolage REAL');
+        debugPrint('[DatabaseService] Added column: ecolage on classes');
+        
+        if (hasFraisEcole) {
+          await db.execute('UPDATE classes SET ecolage = fraisEcole');
+          debugPrint('[DatabaseService] Migrated data from fraisEcole to ecolage');
+        }
+      } catch (e) {
+        debugPrint('[DatabaseService] Error adding ecolage: $e');
+      }
+    }
+  }
+
+  Future<void> _ensureClassFraisInscriptionColumn(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(classes)');
+    final has = cols.any((c) => c['name'] == 'fraisInscription');
+    if (!has) {
+      try {
+        await db.execute('ALTER TABLE classes ADD COLUMN fraisInscription REAL');
+        debugPrint('[DatabaseService] Added column: fraisInscription on classes');
+      } catch (e) {
+        debugPrint('[DatabaseService] Error adding fraisInscription: $e');
+      }
+    }
+  }
+
+  Future<void> _ensureStudentTypeInscriptionColumn(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(students)');
+    final has = cols.any((c) => c['name'] == 'typeInscription');
+    if (!has) {
+      try {
+        await db.execute(
+          "ALTER TABLE students ADD COLUMN typeInscription TEXT NOT NULL DEFAULT 'Réinscription'",
+        );
+        debugPrint('[DatabaseService] Added column: typeInscription on students');
+      } catch (e) {
+        debugPrint('[DatabaseService] Error adding typeInscription: $e');
+      }
+    }
   }
 
   Future<void> _ensureUsersSecurityColumns(Database db) async {
@@ -2546,7 +2598,8 @@ class DatabaseService {
           ministry TEXT,
           republicMotto TEXT,
           educationDirection TEXT,
-          inspection TEXT
+          inspection TEXT,
+          slogan TEXT
         )
       ''');
       debugPrint(
@@ -2578,6 +2631,7 @@ class DatabaseService {
       'civilityCollege TEXT',
       'civilityLycee TEXT',
       'civilityUniversity TEXT',
+      'slogan TEXT',
     ];
 
     for (final columnDef in newColumns) {

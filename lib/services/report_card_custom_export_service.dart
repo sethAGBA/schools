@@ -8,6 +8,7 @@ import 'package:school_manager/models/grade.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/pdf_service.dart';
 
 class ReportCardCustomExportService {
   static Future<List<int>> generateReportCardCustomPdf({
@@ -69,8 +70,9 @@ class ReportCardCustomExportService {
                     .a4
                     .landscape // Format court : A4 standard
               : PdfPageFormat.a4);
-    final font = await pw.Font.times();
-    final fontBold = await pw.Font.timesBold();
+    final fonts = await PdfService.loadPdfFonts();
+    final font = fonts.regular;
+    final fontBold = fonts.bold;
     final DatabaseService db = DatabaseService();
     final subjectWeights = await db.getClassSubjectCoefficients(
       className,
@@ -258,7 +260,7 @@ class ReportCardCustomExportService {
                     font,
                   ),
                   pw.Spacer(),
-                  _buildFooterNote(footerNote, font),
+                  _buildFooterNote(footerNote, font, schoolInfo.slogan ?? ''),
                 ],
               ),
             ),
@@ -1370,21 +1372,44 @@ class ReportCardCustomExportService {
     return civ.isNotEmpty ? '$civ $trimmed' : trimmed;
   }
 
-  static pw.Widget _buildFooterNote(String footerNote, pw.Font font) {
+  static pw.Widget _buildFooterNote(
+    String footerNote,
+    pw.Font font,
+    String slogan,
+  ) {
     final note = footerNote.trim();
-    if (note.isEmpty) return pw.SizedBox();
+    final slog = slogan.trim();
+    if (note.isEmpty && slog.isEmpty) return pw.SizedBox();
     return pw.Padding(
       padding: const pw.EdgeInsets.only(top: 4),
-      child: pw.Center(
-        child: pw.Text(
-          note,
-          style: pw.TextStyle(
-            font: font,
-            fontSize: 7,
-            fontStyle: pw.FontStyle.italic,
-          ),
-          textAlign: pw.TextAlign.center,
-        ),
+      child: pw.Column(
+        children: [
+          if (slog.isNotEmpty)
+            pw.Center(
+              child: pw.Text(
+                slog,
+                style: pw.TextStyle(
+                  font: font,
+                  fontSize: 6,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+          if (slog.isNotEmpty && note.isNotEmpty) pw.SizedBox(height: 1),
+          if (note.isNotEmpty)
+            pw.Center(
+              child: pw.Text(
+                note,
+                style: pw.TextStyle(
+                  font: font,
+                  fontSize: 7,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+        ],
       ),
     );
   }

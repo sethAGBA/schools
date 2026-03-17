@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -17,7 +16,7 @@ import 'package:school_manager/models/staff.dart';
 import 'package:school_manager/models/timetable_entry.dart';
 import 'package:school_manager/models/course.dart';
 import 'package:school_manager/models/category.dart';
-import 'package:school_manager/models/signature.dart';
+
 import 'package:school_manager/utils/academic_year.dart';
 import 'package:school_manager/services/database_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
@@ -44,13 +43,13 @@ class PdfService {
       'NB: Il n\'est delivre qu\'un seul Bulletin. Delai de reclamation : 30 jours date de reception.';
   static _PdfFonts? _cachedPdfFonts;
 
-  static Future<_PdfFonts> _loadPdfFonts() async {
+  static Future<_PdfFonts> loadPdfFonts() async {
     if (_cachedPdfFonts != null) return _cachedPdfFonts!;
     final regularData = await rootBundle.load(
-      'assets/fonts/nunito/Nunito-Regular.ttf',
+      'assets/fonts/Noto_Sans/NotoSans-Regular.ttf',
     );
     final boldData = await rootBundle.load(
-      'assets/fonts/nunito/Nunito-Bold.ttf',
+      'assets/fonts/Noto_Sans/NotoSans-Bold.ttf',
     );
     final symbolsData = await rootBundle.load(
       'assets/fonts/NotoSansSymbols2/NotoSansSymbols2-Regular.ttf',
@@ -63,6 +62,16 @@ class PdfService {
     return _cachedPdfFonts!;
   }
 
+  /// Remplace les caractères problématiques pour les polices PDF standards
+  /// (Bien que nous passions en TTF, c'est une sécurité supplémentaire)
+  static String sanitizeForPdf(String text) {
+    return text
+        .replaceAll('’', "'")
+        .replaceAll('‘', "'")
+        .replaceAll('–', "-")
+        .replaceAll('—', "-");
+  }
+
   /// Vérifie si l'action est autorisée (non bloquée par le mode coffre fort)
   static bool _isActionAllowed() {
     return SafeModeService.instance.isActionAllowed();
@@ -72,6 +81,18 @@ class PdfService {
   static String dashIfBlank(String? value, {String placeholder = '-'}) {
     final v = value?.trim() ?? '';
     return v.isEmpty ? placeholder : v;
+  }
+
+  /// Assainit un nom de fichier en remplaçant les caractères interdits.
+  static String sanitizeFileName(String fileName) {
+    return fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  }
+
+  /// S'assure que le répertoire parent d'un fichier existe.
+  static Future<void> ensureParentDirectory(File file) async {
+    if (!await file.parent.exists()) {
+      await file.parent.create(recursive: true);
+    }
   }
 
   /// Affiche uniquement le nom (dernier token) d'un professeur.
@@ -212,8 +233,9 @@ class PdfService {
     _checkSafeMode(); // Vérifier le mode coffre fort
     final pdf = pw.Document();
     final formatter = NumberFormat('#,##0 FCFA', 'fr_FR');
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primaryColor = PdfColor.fromHex('#4F46E5');
     final secondaryColor = PdfColor.fromHex('#6B7280');
     final lightBgColor = PdfColor.fromHex('#F3F4F6');
@@ -435,7 +457,7 @@ class PdfService {
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                schoolInfo.name,
+                                sanitizeForPdf(schoolInfo.name),
                                 style: pw.TextStyle(
                                   font: timesBold,
                                   fontSize: 20,
@@ -546,7 +568,9 @@ class PdfService {
                       pw.Expanded(
                         flex: 3,
                         child: pw.Text(
-                          '${student.lastName} ${student.firstName}'.trim(),
+                          sanitizeForPdf(
+                            '${student.lastName} ${student.firstName}'.trim(),
+                          ),
                           style: pw.TextStyle(font: times),
                         ),
                       ),
@@ -836,8 +860,9 @@ class PdfService {
     _checkSafeMode(); // Vérifier le mode coffre fort
     final pdf = pw.Document();
     final formatter = NumberFormat('#,##0 FCFA', 'fr_FR');
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primaryColor = PdfColor.fromHex('#4F46E5');
     final secondaryColor = PdfColor.fromHex('#6B7280');
     final lightBgColor = PdfColor.fromHex('#F3F4F6');
@@ -1172,75 +1197,105 @@ class PdfService {
   }) async {
     final pdf = pw.Document();
     final formatter = NumberFormat('#,##0.00', 'fr_FR');
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final dbService = DatabaseService();
     final schoolInfo = await dbService.getSchoolInfo();
     final currentAcademicYear = await getCurrentAcademicYear();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
+        maxPages: 1000,
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+        footer: (context) => pw.Column(
           children: [
-            // En-tête administratif (Ministère / République / Devise + Inspection / Direction)
-            if (schoolInfo != null) ...[
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Expanded(
-                    child: ((schoolInfo!.ministry ?? '').isNotEmpty)
-                        ? pw.Text(
-                            (schoolInfo!.ministry ?? '').toUpperCase(),
-                            style: pw.TextStyle(
-                              font: timesBold,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          )
-                        : pw.SizedBox(),
-                  ),
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
-                              .toUpperCase()),
+            pw.Container(height: 0.8, color: PdfColors.blueGrey300),
+            pw.SizedBox(height: 4),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Page ${context.pageNumber}/${context.pagesCount}',
+                  style: pw.TextStyle(font: times, fontSize: 8),
+                ),
+              ],
+            ),
+          ],
+        ),
+        build: (pw.Context context) => [
+          // En-tête administratif (Ministère / République / Devise + Inspection / Direction)
+          if (schoolInfo != null) ...[
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: ((schoolInfo!.ministry ?? '').isNotEmpty)
+                      ? pw.Text(
+                          (schoolInfo!.ministry ?? '').toUpperCase(),
                           style: pw.TextStyle(
                             font: timesBold,
                             fontSize: 10,
                             color: PdfColors.blueGrey800,
                           ),
+                        )
+                      : pw.SizedBox(),
+                ),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
+                            .toUpperCase()),
+                        style: pw.TextStyle(
+                          font: timesBold,
+                          fontSize: 10,
+                          color: PdfColors.blueGrey800,
                         ),
-                        if ((schoolInfo!.republicMotto ?? '').isNotEmpty)
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.only(top: 2),
-                            child: pw.Text(
-                              schoolInfo!.republicMotto!,
-                              style: pw.TextStyle(
-                                font: times,
-                                fontSize: 9,
-                                color: PdfColors.blueGrey700,
-                                fontStyle: pw.FontStyle.italic,
-                              ),
-                              textAlign: pw.TextAlign.right,
+                      ),
+                      if ((schoolInfo!.republicMotto ?? '').isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text(
+                            schoolInfo!.republicMotto!,
+                            style: pw.TextStyle(
+                              font: times,
+                              fontSize: 9,
+                              color: PdfColors.blueGrey700,
+                              fontStyle: pw.FontStyle.italic,
                             ),
+                            textAlign: pw.TextAlign.right,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                ],
-              ),
-              pw.SizedBox(height: 3),
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    child: ((schoolInfo!.inspection ?? '').isNotEmpty)
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 3),
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: ((schoolInfo!.inspection ?? '').isNotEmpty)
+                      ? pw.Text(
+                          'Inspection: ${schoolInfo!.inspection}',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 9,
+                            color: PdfColors.blueGrey700,
+                          ),
+                        )
+                      : pw.SizedBox(),
+                ),
+                pw.Expanded(
+                  child: pw.Align(
+                    alignment: pw.Alignment.centerRight,
+                    child: ((schoolInfo!.educationDirection ?? '')
+                            .isNotEmpty)
                         ? pw.Text(
-                            'Inspection: ${schoolInfo!.inspection}',
+                            "Direction de l'enseignement: ${schoolInfo!.educationDirection}",
                             style: pw.TextStyle(
                               font: times,
                               fontSize: 9,
@@ -1249,198 +1304,191 @@ class PdfService {
                           )
                         : pw.SizedBox(),
                   ),
-                  pw.Expanded(
-                    child: pw.Align(
-                      alignment: pw.Alignment.centerRight,
-                      child: ((schoolInfo!.educationDirection ?? '').isNotEmpty)
-                          ? pw.Text(
-                              "Direction de l'enseignement: ${schoolInfo!.educationDirection}",
-                              style: pw.TextStyle(
-                                font: times,
-                                fontSize: 9,
-                                color: PdfColors.blueGrey700,
-                              ),
-                            )
-                          : pw.SizedBox(),
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 8),
-            ],
-            // Header
-            pw.Container(
-              padding: const pw.EdgeInsets.all(16),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: PdfColors.grey300),
-                borderRadius: pw.BorderRadius.circular(8),
-              ),
-              child: pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  if (schoolInfo?.logoPath != null &&
-                      File(schoolInfo!.logoPath!).existsSync())
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.only(right: 12),
-                      child: pw.Image(
-                        pw.MemoryImage(
-                          File(schoolInfo.logoPath!).readAsBytesSync(),
-                        ),
-                        width: 50,
-                        height: 50,
-                      ),
-                    ),
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          schoolInfo?.name ?? 'Établissement',
-                          style: pw.TextStyle(font: timesBold, fontSize: 16),
-                        ),
-                        pw.Text(
-                          schoolInfo?.address ?? '',
-                          style: pw.TextStyle(
-                            font: times,
-                            fontSize: 10,
-                            color: PdfColors.blueGrey800,
-                          ),
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          'Année académique: $currentAcademicYear',
-                          style: pw.TextStyle(
-                            font: times,
-                            fontSize: 10,
-                            color: PdfColors.blueGrey800,
-                          ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        if ((schoolInfo?.email ?? '').isNotEmpty)
-                          pw.Text(
-                            'Email : ${schoolInfo!.email}',
-                            style: pw.TextStyle(
-                              font: times,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          ),
-                        if ((schoolInfo?.website ?? '').isNotEmpty)
-                          pw.Text(
-                            'Site web : ${schoolInfo!.website}',
-                            style: pw.TextStyle(
-                              font: times,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          ),
-                        if ((schoolInfo?.telephone ?? '').isNotEmpty)
-                          pw.Text(
-                            'Téléphone : ${schoolInfo!.telephone}',
-                            style: pw.TextStyle(
-                              font: times,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Text(
-              'Export des paiements',
-              style: pw.TextStyle(
-                font: timesBold,
-                fontSize: 18,
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ),
-            pw.SizedBox(height: 12),
-            pw.Table.fromTextArray(
-              cellStyle: pw.TextStyle(font: times, fontSize: 11),
-              headerStyle: pw.TextStyle(
-                font: timesBold,
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-              ),
-              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
-              headers: [
-                'Nom',
-                'Classe',
-                'Année',
-                'Montant dû',
-                'Montant payé',
-                'Reste',
-                'Retard',
-                'Date',
-                'Statut',
-                'Commentaire',
+                ),
               ],
-              data: rows.map((row) {
-                final student = row['student'];
-                final payment = row['payment'];
-                final classe = row['classe'];
-                final totalPaid = row['totalPaid'] ?? 0.0;
-                final double montantMax =
-                    (row['totalDue'] as num?)?.toDouble() ??
-                    ((classe?.fraisEcole ?? 0) +
-                        (classe?.fraisCotisationParallele ?? 0));
-                final remaining = montantMax - totalPaid;
-                final arrears = (row['arrears'] as num?)?.toDouble();
-                String statut;
-                if (montantMax > 0 && totalPaid >= montantMax) {
-                  statut = 'Payé';
-                } else if (payment != null && totalPaid > 0) {
-                  statut = 'En attente';
-                } else {
-                  statut = 'Impayé';
-                }
-                return [
-                  '${student.firstName} ${student.lastName}'.trim(),
-                  student.className,
-                  classe?.academicYear ?? '',
-                  formatter.format(montantMax),
-                  formatter.format(totalPaid),
-                  formatter.format(remaining > 0 ? remaining : 0),
-                  formatter.format((arrears ?? 0) > 0 ? arrears : 0),
-                  payment != null
-                      ? payment.date.replaceFirst('T', ' ').substring(0, 16)
-                      : '',
-                  statut,
-                  payment?.comment ?? '',
-                ];
-              }).toList(),
-              cellAlignment: pw.Alignment.centerLeft,
-              headerAlignments: {
-                0: pw.Alignment.centerLeft,
-                1: pw.Alignment.centerLeft,
-                2: pw.Alignment.centerLeft,
-                3: pw.Alignment.centerRight,
-                4: pw.Alignment.centerRight,
-                5: pw.Alignment.centerRight,
-                6: pw.Alignment.centerRight,
-                7: pw.Alignment.centerLeft,
-                8: pw.Alignment.center,
-                9: pw.Alignment.centerLeft,
-              },
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2),
-                1: const pw.FlexColumnWidth(1.2),
-                2: const pw.FlexColumnWidth(1.2),
-                3: const pw.FlexColumnWidth(1.1),
-                4: const pw.FlexColumnWidth(1.1),
-                5: const pw.FlexColumnWidth(1.1),
-                6: const pw.FlexColumnWidth(1.1),
-                7: const pw.FlexColumnWidth(1.3),
-                8: const pw.FlexColumnWidth(1.0),
-                9: const pw.FlexColumnWidth(2),
-              },
             ),
+            pw.SizedBox(height: 8),
           ],
-        ),
+          // Header
+          pw.Container(
+            padding: const pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.grey300),
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                if (schoolInfo?.logoPath != null &&
+                    File(schoolInfo!.logoPath!).existsSync())
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(right: 12),
+                    child: pw.Image(
+                      pw.MemoryImage(
+                        File(schoolInfo.logoPath!).readAsBytesSync(),
+                      ),
+                      width: 50,
+                      height: 50,
+                    ),
+                  ),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        schoolInfo?.name ?? 'Établissement',
+                        style: pw.TextStyle(font: timesBold, fontSize: 16),
+                      ),
+                      pw.Text(
+                        schoolInfo?.address ?? '',
+                        style: pw.TextStyle(
+                          font: times,
+                          fontSize: 10,
+                          color: PdfColors.blueGrey800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        'Année académique: $currentAcademicYear',
+                        style: pw.TextStyle(
+                          font: times,
+                          fontSize: 10,
+                          color: PdfColors.blueGrey800,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      if ((schoolInfo?.email ?? '').isNotEmpty)
+                        pw.Text(
+                          'Email : ${schoolInfo!.email}',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 10,
+                            color: PdfColors.blueGrey800,
+                          ),
+                        ),
+                      if ((schoolInfo?.website ?? '').isNotEmpty)
+                        pw.Text(
+                          'Site web : ${schoolInfo!.website}',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 10,
+                            color: PdfColors.blueGrey800,
+                          ),
+                        ),
+                      if ((schoolInfo?.telephone ?? '').isNotEmpty)
+                        pw.Text(
+                          'Téléphone : ${schoolInfo!.telephone}',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 10,
+                            color: PdfColors.blueGrey800,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          pw.Text(
+            'Export des paiements',
+            style: pw.TextStyle(
+              font: timesBold,
+              fontSize: 18,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 12),
+          pw.Table.fromTextArray(
+            cellStyle: pw.TextStyle(font: times, fontSize: 11),
+            headerStyle: pw.TextStyle(
+              font: timesBold,
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+            ),
+            headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+            headers: [
+              'Nom',
+              'Classe',
+              'Année',
+              'Montant dû',
+              'Montant payé',
+              'Reste',
+              'Retard',
+              'Date',
+              'Statut',
+              'Commentaire',
+            ],
+            data: rows.map((row) {
+              final student = row['student'];
+              final payment = row['payment'];
+              final classe = row['classe'];
+              final totalPaid = row['totalPaid'] ?? 0.0;
+              double montantMax = (row['totalDue'] as num?)?.toDouble() ?? 0.0;
+              if (montantMax == 0.0) {
+                montantMax = (classe?.ecolage ?? 0) +
+                    (classe?.fraisCotisationParallele ?? 0);
+                if (student.typeInscription == 'Nouvelle inscription') {
+                  double regFee = (classe?.fraisInscription ?? 0);
+                  if (regFee <= 0 && schoolInfo?.registrationFees != null) {
+                    regFee = schoolInfo!.registrationFees!;
+                  }
+                  montantMax += regFee;
+                }
+              }
+              final remaining = montantMax - totalPaid;
+              final arrears = (row['arrears'] as num?)?.toDouble();
+              String statut;
+              if (montantMax > 0 && totalPaid >= montantMax) {
+                statut = 'Payé';
+              } else if (payment != null && totalPaid > 0) {
+                statut = 'En attente';
+              } else {
+                statut = 'Impayé';
+              }
+              return [
+                '${student.lastName} ${student.firstName}'.trim(),
+                student.className,
+                classe?.academicYear ?? '',
+                formatter.format(montantMax),
+                formatter.format(totalPaid),
+                formatter.format(remaining > 0 ? remaining : 0),
+                formatter.format((arrears ?? 0) > 0 ? arrears : 0),
+                payment != null
+                    ? payment.date.replaceFirst('T', ' ').substring(0, 16)
+                    : '',
+                statut,
+                payment?.comment ?? '',
+              ];
+            }).toList(),
+            cellAlignment: pw.Alignment.centerLeft,
+            headerAlignments: {
+              0: pw.Alignment.centerLeft,
+              1: pw.Alignment.centerLeft,
+              2: pw.Alignment.centerLeft,
+              3: pw.Alignment.centerRight,
+              4: pw.Alignment.centerRight,
+              5: pw.Alignment.centerRight,
+              6: pw.Alignment.centerRight,
+              7: pw.Alignment.centerLeft,
+              8: pw.Alignment.center,
+              9: pw.Alignment.centerLeft,
+            },
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2),
+              1: const pw.FlexColumnWidth(1.2),
+              2: const pw.FlexColumnWidth(1.2),
+              3: const pw.FlexColumnWidth(1.1),
+              4: const pw.FlexColumnWidth(1.1),
+              5: const pw.FlexColumnWidth(1.1),
+              6: const pw.FlexColumnWidth(1.1),
+              7: const pw.FlexColumnWidth(1.3),
+              8: const pw.FlexColumnWidth(1.0),
+              9: const pw.FlexColumnWidth(2),
+            },
+          ),
+        ],
       ),
     );
     return pdf.save();
@@ -1460,8 +1508,9 @@ class PdfService {
   }) async {
     _checkSafeMode();
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final formatter = NumberFormat('#,##0 FCFA', 'fr_FR');
     final dbService = DatabaseService();
     final schoolInfo = await dbService.getSchoolInfo();
@@ -1619,9 +1668,11 @@ class PdfService {
   static Future<List<int>> exportStudentsListPdf({
     required List<Map<String, dynamic>> students,
   }) async {
+    _checkSafeMode();
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -1641,8 +1692,12 @@ class PdfService {
       ..sort((a, b) {
         final studentA = a['student'] as Student;
         final studentB = b['student'] as Student;
-        final nameA = '${studentA.lastName} ${studentA.firstName}'.trim();
-        final nameB = '${studentB.lastName} ${studentB.firstName}'.trim();
+        final nameA = sanitizeForPdf(
+          '${studentA.lastName} ${studentA.firstName}'.trim(),
+        );
+        final nameB = sanitizeForPdf(
+          '${studentB.lastName} ${studentB.firstName}'.trim(),
+        );
         return nameA.compareTo(nameB);
       });
 
@@ -1654,12 +1709,13 @@ class PdfService {
     final String footerDate = DateFormat('dd/MM/yyyy').format(DateTime.now());
     pdf.addPage(
       pw.MultiPage(
+        maxPages: 1000,
         pageTheme: pw.PageTheme(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(24),
-          buildBackground:
-              (schoolInfo?.logoPath != null &&
-                  File(schoolInfo!.logoPath!).existsSync())
+          buildBackground: (schoolInfo != null &&
+                  schoolInfo.logoPath != null &&
+                  File(schoolInfo.logoPath!).existsSync())
               ? (context) => pw.FullPage(
                   ignoreMargins: true,
                   child: pw.Opacity(
@@ -1699,7 +1755,7 @@ class PdfService {
         build: (context) {
           return [
             // En-tête administratif
-            if (schoolInfo != null) ...[
+            ...[
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -1783,8 +1839,8 @@ class PdfService {
             ],
             // En-tête harmonisé (comme le relevé de notes): logo centré + nom d'établissement en majuscules + séparateur
             if (schoolInfo != null) ...[
-              if ((schoolInfo!.logoPath ?? '').isNotEmpty &&
-                  File(schoolInfo!.logoPath!).existsSync())
+              if ((schoolInfo.logoPath ?? '').isNotEmpty &&
+                  File(schoolInfo.logoPath!).existsSync())
                 pw.Center(
                   child: pw.Container(
                     height: 40,
@@ -1988,8 +2044,9 @@ class PdfService {
     required Class? classe,
   }) async {
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -2032,9 +2089,9 @@ class PdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Expanded(
-                          child: ((schoolInfo!.ministry ?? '').isNotEmpty)
+                          child: ((schoolInfo.ministry ?? '').isNotEmpty)
                               ? pw.Text(
-                                  (schoolInfo!.ministry ?? '').toUpperCase(),
+                                  (schoolInfo.ministry ?? '').toUpperCase(),
                                   style: pw.TextStyle(
                                     font: timesBold,
                                     fontSize: 10,
@@ -2048,7 +2105,7 @@ class PdfService {
                             crossAxisAlignment: pw.CrossAxisAlignment.end,
                             children: [
                               pw.Text(
-                                ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
+                                ((schoolInfo.republic ?? 'RÉPUBLIQUE')
                                     .toUpperCase()),
                                 style: pw.TextStyle(
                                   font: timesBold,
@@ -2122,13 +2179,13 @@ class PdfService {
                     child: pw.Row(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        if (schoolInfo?.logoPath != null &&
+                        if (schoolInfo!.logoPath != null &&
                             File(schoolInfo!.logoPath!).existsSync())
                           pw.Padding(
                             padding: const pw.EdgeInsets.only(right: 16),
                             child: pw.Image(
                               pw.MemoryImage(
-                                File(schoolInfo.logoPath!).readAsBytesSync(),
+                                File(schoolInfo!.logoPath!).readAsBytesSync(),
                               ),
                               width: 60,
                               height: 60,
@@ -2139,7 +2196,9 @@ class PdfService {
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
                               pw.Text(
-                                schoolInfo?.name ?? 'École',
+                                schoolInfo!.name.isNotEmpty
+                                    ? schoolInfo!.name
+                                    : 'École',
                                 style: pw.TextStyle(
                                   font: timesBold,
                                   fontSize: 20,
@@ -2237,7 +2296,7 @@ class PdfService {
                               ),
                               pw.SizedBox(height: 4),
                               pw.Text(
-                                '${student.firstName} ${student.lastName}'
+                                '${student.lastName} ${student.firstName}'
                                     .trim()
                                     .toUpperCase(),
                                 style: pw.TextStyle(
@@ -2284,7 +2343,7 @@ class PdfService {
                                 children: [
                                   _buildInfoRow(
                                     'Nom complet',
-                                    '${student.firstName} ${student.lastName}'
+                                    '${student.lastName} ${student.firstName}'
                                         .trim(),
                                     times,
                                     timesBold,
@@ -2568,75 +2627,105 @@ class PdfService {
     required List<Class> classes,
   }) async {
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final dbService = DatabaseService();
     final schoolInfo = await dbService.getSchoolInfo();
     final currentAcademicYear = await getCurrentAcademicYear();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
+        maxPages: 1000,
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(24),
-        build: (pw.Context context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+        footer: (context) => pw.Column(
           children: [
-            if (schoolInfo != null) ...[
-              // En-tête administratif
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Expanded(
-                    child: ((schoolInfo!.ministry ?? '').isNotEmpty)
-                        ? pw.Text(
-                            (schoolInfo!.ministry ?? '').toUpperCase(),
-                            style: pw.TextStyle(
-                              font: timesBold,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          )
-                        : pw.SizedBox(),
-                  ),
-                  pw.Expanded(
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
-                              .toUpperCase()),
+            pw.Container(height: 0.8, color: PdfColors.blueGrey300),
+            pw.SizedBox(height: 4),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'Page ${context.pageNumber}/${context.pagesCount}',
+                  style: pw.TextStyle(font: times, fontSize: 8),
+                ),
+              ],
+            ),
+          ],
+        ),
+        build: (pw.Context context) => [
+          if (schoolInfo != null) ...[
+            // En-tête administratif
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: ((schoolInfo!.ministry ?? '').isNotEmpty)
+                      ? pw.Text(
+                          (schoolInfo!.ministry ?? '').toUpperCase(),
                           style: pw.TextStyle(
                             font: timesBold,
                             fontSize: 10,
                             color: PdfColors.blueGrey800,
                           ),
+                        )
+                      : pw.SizedBox(),
+                ),
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
+                            .toUpperCase()),
+                        style: pw.TextStyle(
+                          font: timesBold,
+                          fontSize: 10,
+                          color: PdfColors.blueGrey800,
                         ),
-                        if ((schoolInfo!.republicMotto ?? '').isNotEmpty)
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.only(top: 2),
-                            child: pw.Text(
-                              schoolInfo!.republicMotto!,
-                              style: pw.TextStyle(
-                                font: times,
-                                fontSize: 9,
-                                color: PdfColors.blueGrey700,
-                                fontStyle: pw.FontStyle.italic,
-                              ),
-                              textAlign: pw.TextAlign.right,
+                      ),
+                      if ((schoolInfo!.republicMotto ?? '').isNotEmpty)
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 2),
+                          child: pw.Text(
+                            schoolInfo!.republicMotto!,
+                            style: pw.TextStyle(
+                              font: times,
+                              fontSize: 9,
+                              color: PdfColors.blueGrey700,
+                              fontStyle: pw.FontStyle.italic,
                             ),
+                            textAlign: pw.TextAlign.right,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                ],
-              ),
-              pw.SizedBox(height: 4),
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    child: ((schoolInfo!.inspection ?? '').isNotEmpty)
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 4),
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: ((schoolInfo!.inspection ?? '').isNotEmpty)
+                      ? pw.Text(
+                          'Inspection: ${schoolInfo!.inspection}',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 9,
+                            color: PdfColors.blueGrey700,
+                          ),
+                        )
+                      : pw.SizedBox(),
+                ),
+                pw.Expanded(
+                  child: pw.Align(
+                    alignment: pw.Alignment.centerRight,
+                    child: ((schoolInfo!.educationDirection ?? '')
+                            .isNotEmpty)
                         ? pw.Text(
-                            'Inspection: ${schoolInfo!.inspection}',
+                            "Direction de l'enseignement: ${schoolInfo!.educationDirection}",
                             style: pw.TextStyle(
                               font: times,
                               fontSize: 9,
@@ -2645,118 +2734,105 @@ class PdfService {
                           )
                         : pw.SizedBox(),
                   ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 8),
+            // Header établissement
+            pw.Container(
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  if (schoolInfo?.logoPath != null &&
+                      File(schoolInfo!.logoPath!).existsSync())
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(right: 12),
+                      child: pw.Image(
+                        pw.MemoryImage(
+                          File(schoolInfo.logoPath!).readAsBytesSync(),
+                        ),
+                        width: 50,
+                        height: 50,
+                      ),
+                    ),
                   pw.Expanded(
-                    child: pw.Align(
-                      alignment: pw.Alignment.centerRight,
-                      child: ((schoolInfo!.educationDirection ?? '').isNotEmpty)
-                          ? pw.Text(
-                              "Direction de l'enseignement: ${schoolInfo!.educationDirection}",
-                              style: pw.TextStyle(
-                                font: times,
-                                fontSize: 9,
-                                color: PdfColors.blueGrey700,
-                              ),
-                            )
-                          : pw.SizedBox(),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          schoolInfo?.name ?? 'Établissement',
+                          style: pw.TextStyle(font: timesBold, fontSize: 16),
+                        ),
+                        pw.Text(
+                          schoolInfo?.address ?? '',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 10,
+                            color: PdfColors.blueGrey800,
+                          ),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'Année académique: $currentAcademicYear',
+                          style: pw.TextStyle(
+                            font: times,
+                            fontSize: 10,
+                            color: PdfColors.blueGrey800,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-              pw.SizedBox(height: 8),
-              // Header établissement
-              pw.Container(
-                padding: const pw.EdgeInsets.all(16),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey300),
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    if (schoolInfo?.logoPath != null &&
-                        File(schoolInfo!.logoPath!).existsSync())
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(right: 12),
-                        child: pw.Image(
-                          pw.MemoryImage(
-                            File(schoolInfo.logoPath!).readAsBytesSync(),
-                          ),
-                          width: 50,
-                          height: 50,
-                        ),
-                      ),
-                    pw.Expanded(
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            schoolInfo?.name ?? 'Établissement',
-                            style: pw.TextStyle(font: timesBold, fontSize: 16),
-                          ),
-                          pw.Text(
-                            schoolInfo?.address ?? '',
-                            style: pw.TextStyle(
-                              font: times,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          ),
-                          pw.SizedBox(height: 2),
-                          pw.Text(
-                            'Année académique: $currentAcademicYear',
-                            style: pw.TextStyle(
-                              font: times,
-                              fontSize: 10,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(height: 12),
-            ],
-            pw.Text(
-              'Liste des classes',
-              style: pw.TextStyle(
-                font: timesBold,
-                fontSize: 22,
-                fontWeight: pw.FontWeight.bold,
-              ),
             ),
-            pw.SizedBox(height: 16),
-            pw.Table.fromTextArray(
-              cellStyle: pw.TextStyle(font: times, fontSize: 11),
-              headerStyle: pw.TextStyle(
-                font: timesBold,
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-              ),
-              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
-              headers: [
-                'Nom',
-                'Année',
-                'Titulaire',
-                'Frais école',
-                'Frais cotisation parallèle',
-              ],
-              data: classes
-                  .map(
-                    (c) => [
-                      c.name,
-                      c.academicYear,
-                      c.titulaire ?? '',
-                      c.fraisEcole?.toString() ?? '',
-                      c.fraisCotisationParallele?.toString() ?? '',
-                    ],
-                  )
-                  .toList(),
-              cellAlignment: pw.Alignment.centerLeft,
-            ),
+            pw.SizedBox(height: 12),
           ],
-        ),
+          pw.Text(
+            'Liste des classes',
+            style: pw.TextStyle(
+              font: timesBold,
+              fontSize: 22,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 16),
+          pw.Table.fromTextArray(
+            cellStyle: pw.TextStyle(font: times, fontSize: 11),
+            headerStyle: pw.TextStyle(
+              font: timesBold,
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+            ),
+            headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+            headers: [
+              'Nom',
+              'Année',
+              'Titulaire',
+              'Écolage',
+              'Frais inscription',
+              'Frais cotisation parallèle',
+            ],
+            data: classes
+                .map(
+                  (c) => [
+                    c.name,
+                    c.academicYear,
+                    c.titulaire ?? '',
+                    c.ecolage?.toString() ?? '',
+                    c.fraisInscription?.toString() ?? '',
+                    c.fraisCotisationParallele?.toString() ?? '',
+                  ],
+                )
+                .toList(),
+            cellAlignment: pw.Alignment.centerLeft,
+          ),
+        ],
       ),
     );
     return pdf.save();
@@ -3060,8 +3136,9 @@ class PdfService {
     required String title,
   }) async {
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -3209,6 +3286,17 @@ class PdfService {
                                   fontWeight: pw.FontWeight.bold,
                                 ),
                               ),
+                              if (schoolInfo.slogan != null &&
+                                  schoolInfo.slogan!.isNotEmpty)
+                                pw.Text(
+                                  schoolInfo.slogan!,
+                                  style: pw.TextStyle(
+                                    font: times,
+                                    fontSize: 10,
+                                    fontStyle: pw.FontStyle.italic,
+                                    color: primary,
+                                  ),
+                                ),
                               pw.SizedBox(height: 2),
                               pw.Text(
                                 schoolInfo.address,
@@ -3439,7 +3527,7 @@ class PdfService {
     required Map<String, int> classDistribution,
   }) async {
     final pdf = pw.Document();
-    final fonts = await _loadPdfFonts();
+    final fonts = await loadPdfFonts();
     final times = fonts.regular;
     final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
@@ -3583,6 +3671,17 @@ class PdfService {
                             fontWeight: pw.FontWeight.bold,
                           ),
                         ),
+                        if (schoolInfo.slogan != null &&
+                            schoolInfo.slogan!.isNotEmpty)
+                          pw.Text(
+                            schoolInfo.slogan!,
+                            style: pw.TextStyle(
+                              font: times,
+                              fontSize: 10,
+                              fontStyle: pw.FontStyle.italic,
+                              color: primary,
+                            ),
+                          ),
                         pw.SizedBox(height: 2),
                         pw.Text(
                           schoolInfo.address,
@@ -3853,8 +3952,9 @@ class PdfService {
     required String title,
   }) async {
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -4457,21 +4557,9 @@ class PdfService {
     final pdf = pw.Document();
 
     // Typographies
-    pw.Font fontRegular;
-    pw.Font fontBold;
-    try {
-      final regularData = await rootBundle.load(
-        'assets/fonts/nunito/Nunito-Regular.ttf',
-      );
-      final boldData = await rootBundle.load(
-        'assets/fonts/nunito/Nunito-Bold.ttf',
-      );
-      fontRegular = pw.Font.ttf(regularData);
-      fontBold = pw.Font.ttf(boldData);
-    } catch (_) {
-      fontRegular = await pw.Font.helvetica();
-      fontBold = await pw.Font.helveticaBold();
-    }
+    final fonts = await loadPdfFonts();
+    final fontRegular = fonts.regular;
+    final fontBold = fonts.bold;
 
     final primary = PdfColor.fromHex('#111827');
     final accent = PdfColor.fromHex('#2563EB');
@@ -5084,8 +5172,9 @@ class PdfService {
     required String title,
   }) async {
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#1F2937');
     final accent = PdfColor.fromHex('#2563EB');
     final light = PdfColor.fromHex('#F3F4F6');
@@ -5782,8 +5871,9 @@ class PdfService {
     required String title,
   }) async {
     final pdf = pw.Document();
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primary = PdfColor.fromHex('#4F46E5');
     final accent = PdfColor.fromHex('#8B5CF6');
     final light = PdfColor.fromHex('#E5E7EB');
@@ -6579,7 +6669,7 @@ class PdfService {
     required String batchId,
   }) async {
     _checkSafeMode();
-    final fonts = await _loadPdfFonts();
+    final fonts = await loadPdfFonts();
     final schoolInfo = await loadSchoolInfo();
     final db = DatabaseService();
     final header = await db.getLibraryLoanBatchDetails(batchId);
@@ -6588,8 +6678,8 @@ class PdfService {
     }
     final items = await db.getLibraryLoanBatchItems(batchId);
 
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primaryColor = PdfColor.fromHex('#4F46E5');
     final secondaryColor = PdfColor.fromHex('#6B7280');
     final lightBgColor = PdfColor.fromHex('#F3F4F6');
@@ -6984,11 +7074,12 @@ class PdfService {
     String? documentNumber,
   }) async {
     _checkSafeMode();
-    await _loadPdfFonts();
+    await loadPdfFonts();
     final schoolInfo = await loadSchoolInfo();
 
-    final times = await pw.Font.times();
-    final timesBold = await pw.Font.timesBold();
+    final fonts = await loadPdfFonts();
+    final times = fonts.regular;
+    final timesBold = fonts.bold;
     final primaryColor = PdfColor.fromHex('#4F46E5');
     final secondaryColor = PdfColor.fromHex('#6B7280');
     final lightBgColor = PdfColor.fromHex('#F3F4F6');

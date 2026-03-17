@@ -289,21 +289,20 @@ class _DisciplinePageState extends State<DisciplinePage> {
       );
       if (directoryPath == null) return;
 
-      final safeStudentName = studentName.trim().isEmpty
-          ? 'Eleve'
-          : studentName.trim().replaceAll(' ', '_');
-      final safeTitle = documentTitle.trim().isEmpty
-          ? 'Document'
-          : documentTitle.trim().replaceAll(' ', '_');
+      final safeStudentName = PdfService.sanitizeFileName(
+        studentName.trim().isEmpty ? 'Eleve' : studentName.trim(),
+      );
+      final safeTitle = PdfService.sanitizeFileName(
+        documentTitle.trim().isEmpty ? 'Document' : documentTitle.trim(),
+      );
       final safeDate = DateFormat('yyyyMMdd').format(eventDate);
-      final fileName =
-          '${safeTitle}_${safeStudentName}_$safeDate${(documentNumber ?? '').trim().isEmpty ? '' : '_${documentNumber!.trim()}'}'
-              .replaceAll('/', '_')
-              .replaceAll('\\', '_')
-              .replaceAll(':', '_');
+      final rawFileName =
+          '${safeTitle}_${safeStudentName}_$safeDate${(documentNumber ?? '').trim().isEmpty ? '' : '_${documentNumber!.trim()}'}';
+      final fileName = PdfService.sanitizeFileName(rawFileName);
 
       final file = File('$directoryPath/$fileName.pdf');
       debugPrint('[Discipline] Document: saving path=${file.path}');
+      await PdfService.ensureParentDirectory(file);
       await file.writeAsBytes(pdfBytes, flush: true);
       if (!mounted) return;
       showSnackBar(context, 'Document enregistré dans $directoryPath');

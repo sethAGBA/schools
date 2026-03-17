@@ -10,6 +10,7 @@ import 'package:school_manager/services/statistics_pdf_service.dart';
 import 'package:school_manager/services/statistics_excel_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/utils/academic_year.dart';
+import 'package:school_manager/services/pdf_service.dart';
 
 class StatisticsPage extends StatefulWidget {
   const StatisticsPage({Key? key}) : super(key: key);
@@ -283,9 +284,11 @@ class _StatisticsPageState extends State<StatisticsPage>
       }
 
       if (pdfBytes != null) {
-        final file = File('$directoryPath/$fileName');
+        final safeFileName = PdfService.sanitizeFileName(fileName);
+        final file = File('$directoryPath/$safeFileName');
+        await PdfService.ensureParentDirectory(file);
         await file.writeAsBytes(pdfBytes, flush: true);
-        _showModernSnackBar('Rapport enregistré : $fileName');
+        _showModernSnackBar('Rapport enregistré : $safeFileName');
         try {
           await OpenFile.open(file.path);
         } catch (_) {}
@@ -356,9 +359,11 @@ class _StatisticsPageState extends State<StatisticsPage>
       }
 
       if (excelBytes != null) {
-        final file = File('$directoryPath/$fileName');
+        final safeFileName = PdfService.sanitizeFileName(fileName);
+        final file = File('$directoryPath/$safeFileName');
+        await PdfService.ensureParentDirectory(file);
         await file.writeAsBytes(excelBytes, flush: true);
-        _showModernSnackBar('Rapport Excel enregistré : $fileName');
+        _showModernSnackBar('Rapport Excel enregistré : $safeFileName');
         try {
           await OpenFile.open(file.path);
         } catch (_) {}

@@ -27,6 +27,7 @@ class SchoolInfo {
   final String? civilityCollege;
   final String? civilityLycee;
   final String? civilityUniversity;
+  final String? slogan;
 
   SchoolInfo({
     required this.name,
@@ -39,6 +40,7 @@ class SchoolInfo {
     this.email,
     this.website,
     this.motto,
+    this.slogan,
     this.republic,
     this.ministry,
     this.republicMotto,
@@ -81,6 +83,7 @@ class SchoolInfo {
       civilityCollege: map['civilityCollege'],
       civilityLycee: map['civilityLycee'],
       civilityUniversity: map['civilityUniversity'],
+      slogan: map['slogan'],
     );
   }
 
@@ -110,6 +113,7 @@ class SchoolInfo {
       'civilityCollege': civilityCollege,
       'civilityLycee': civilityLycee,
       'civilityUniversity': civilityUniversity,
+      'slogan': slogan,
     };
   }
 }
@@ -145,6 +149,7 @@ Future<SchoolInfo> loadSchoolInfo() async {
       republicMotto: prefs.getString('school_republic_motto'),
       educationDirection: prefs.getString('school_education_direction'),
       inspection: prefs.getString('school_inspection'),
+      slogan: prefs.getString('school_slogan'),
     );
     // Save to DB for future use
     await dbService.insertSchoolInfo(schoolInfo);
@@ -182,6 +187,7 @@ Future<SchoolInfo> loadSchoolInfo() async {
         republicMotto: schoolInfo.republicMotto,
         educationDirection: schoolInfo.educationDirection,
         inspection: schoolInfo.inspection,
+        slogan: schoolInfo.slogan,
       );
       await dbService.insertSchoolInfo(merged);
       schoolInfo = merged;
