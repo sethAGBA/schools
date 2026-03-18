@@ -963,12 +963,16 @@ class _SettingsPageState extends State<SettingsPage>
       'Cette action remplacera toutes les données actuelles. Voulez-vous continuer ? (Une sauvegarde est recommandée avant)',
     );
     if (!reallyRestore) return;
+
     try {
+      // Verrouiller l'accès à la base de données pour empêcher les réouvertures automatiques
+      DatabaseService.lockForRestoration();
+
       // Fermer la base avant de restaurer
       await DatabaseService().closeDatabase();
       // Un court délai peut être nécessaire sur Windows pour que le système libère le fichier
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['db'],
@@ -988,7 +992,7 @@ class _SettingsPageState extends State<SettingsPage>
       // S'assurer que le dossier parent existe (résout l'erreur PathNotFoundException)
       final dbFile = File(dbPath);
       await dbFile.parent.create(recursive: true);
-      
+
       // Tentative de remplacement du fichier avec gestion d'erreur spécifique au verrouillage
       try {
         if (await dbFile.exists()) {
@@ -998,13 +1002,16 @@ class _SettingsPageState extends State<SettingsPage>
         debugPrint('[SettingsPage] Erreur lors de la suppression (verrou ?) : $e');
         // On continue quand même, copy() pourrait réussir à écraser si delete() échoue
       }
-      
+
       await pickedFile.copy(dbPath);
       _showModernSnackBar(
         'Restauration réussie. Veuillez redémarrer l\'application.',
       );
     } catch (e) {
       _showModernSnackBar('Erreur lors de la restauration : $e', isError: true);
+    } finally {
+      // Toujours déverrouiller la base à la fin pour permettre les accès futurs
+      DatabaseService.unlockAfterRestoration();
     }
   }
 

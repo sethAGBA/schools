@@ -93,11 +93,34 @@ class DatabaseService {
   // bool _useInMemory = false;
   // ============================================================================
 
+  static bool _isRestoring = false;
+
+  /// Verrouille l'accès à la base de données pendant une restauration
+  static void lockForRestoration() {
+    _isRestoring = true;
+    debugPrint('[DatabaseService] BASE VERROUILLÉE POUR RESTAURATION');
+  }
+
+  /// Déverrouille l'accès à la base de données après une restauration
+  static void unlockAfterRestoration() {
+    _isRestoring = false;
+    debugPrint('[DatabaseService] BASE DÉVERROUILLÉE');
+  }
+
   static void _bumpTeacherAssignmentsVersion() {
     teacherAssignmentsVersion.value = teacherAssignmentsVersion.value + 1;
   }
 
   Future<Database> get database async {
+    // Si une restauration est en cours, on attend ou on échoue
+    if (_isRestoring) {
+      debugPrint('[DatabaseService] Accès à la base refusé : restauration en cours');
+      // On attend que la restauration soit finie via une boucle simple (ou on pourrait utiliser un Completer)
+      while (_isRestoring) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
+
     if (_database != null) return _database!;
     if (_openingDatabase != null) {
       return await _openingDatabase!;
