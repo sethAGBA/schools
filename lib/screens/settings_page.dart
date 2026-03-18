@@ -982,8 +982,11 @@ class _SettingsPageState extends State<SettingsPage>
         dbPath = '$dbDir/ecole_manager.db';
       }
       print('[SettingsPage] Restauration de la base à : $dbPath');
-      // Supprimer l'ancien fichier avant de copier
+      // S'assurer que le dossier parent existe (résout l'erreur PathNotFoundException)
       final dbFile = File(dbPath);
+      await dbFile.parent.create(recursive: true);
+      
+      // Supprimer l'ancien fichier avant de copier
       if (await dbFile.exists()) {
         await dbFile.delete();
       }
