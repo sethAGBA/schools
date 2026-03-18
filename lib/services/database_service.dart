@@ -31,7 +31,7 @@ import 'package:school_manager/models/library_loan.dart';
 import 'package:school_manager/models/teacher_assignment.dart';
 // Removed UI and prefs from data layer
 import 'package:path_provider/path_provider.dart';
-import 'dart:io' show Platform, File;
+import 'dart:io' show Platform, File, Directory;
 import 'package:flutter/foundation.dart' show kIsWeb;
 // ANCIENNE MÉTHODE: utilise getDatabasesPath() de sqflite (pas besoin d'import supplémentaire)
 
@@ -243,24 +243,34 @@ class DatabaseService {
     // On utilise getApplicationSupportDirectory() (ex: AppData) pour Desktop.
     // ============================================================================
     String path;
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       final appSupportDir = await getApplicationSupportDirectory();
       path = join(appSupportDir.path, 'ecole_manager.db');
-      
-      // MIGRATION: Copier l'ancienne base de données si elle existe
-      final oldPath = join(await getDatabasesPath(), 'ecole_manager.db');
+
+      // MIGRATION: Chercher l'ancienne base de données dans plusieurs emplacements possibles
+      final possibleOldPaths = [
+        join(await getDatabasesPath(), 'ecole_manager.db'),
+        join(Directory.current.path, 'databases', 'ecole_manager.db'), // FFI default
+        join(Directory.current.path, '.dart_tool', 'sqflite', 'ecole_manager.db'),
+      ];
+
       final newFile = File(path);
-      final oldFile = File(oldPath);
-      
-      if (!await newFile.exists() && await oldFile.exists()) {
-        try {
-          if (!await appSupportDir.exists()) {
-            await appSupportDir.create(recursive: true);
+      if (!await newFile.exists()) {
+        for (final oldPath in possibleOldPaths) {
+          final oldFile = File(oldPath);
+          if (await oldFile.exists()) {
+            try {
+              if (!await appSupportDir.exists()) {
+                await appSupportDir.create(recursive: true);
+              }
+              await oldFile.copy(path);
+              debugPrint('[DatabaseService] Ancienne base de données migrée depuis $oldPath vers AppData avec succès.');
+              break; // Stop looking once we found and copied it
+            } catch (e) {
+              debugPrint('[DatabaseService] Erreur lors de la migration depuis $oldPath : $e');
+            }
           }
-          await oldFile.copy(path);
-          debugPrint('[DatabaseService] Ancienne base de données migrée vers AppData avec succès.');
-        } catch (e) {
-          debugPrint('[DatabaseService] Erreur lors de la migration : $e');
         }
       }
     } else {
@@ -778,15 +788,17 @@ class DatabaseService {
     final cols = await db.rawQuery('PRAGMA table_info(classes)');
     final hasEcolage = cols.any((c) => c['name'] == 'ecolage');
     final hasFraisEcole = cols.any((c) => c['name'] == 'fraisEcole');
-    
+
     if (!hasEcolage) {
       try {
         await db.execute('ALTER TABLE classes ADD COLUMN ecolage REAL');
         debugPrint('[DatabaseService] Added column: ecolage on classes');
-        
+
         if (hasFraisEcole) {
           await db.execute('UPDATE classes SET ecolage = fraisEcole');
-          debugPrint('[DatabaseService] Migrated data from fraisEcole to ecolage');
+          debugPrint(
+            '[DatabaseService] Migrated data from fraisEcole to ecolage',
+          );
         }
       } catch (e) {
         debugPrint('[DatabaseService] Error adding ecolage: $e');
@@ -799,8 +811,12 @@ class DatabaseService {
     final has = cols.any((c) => c['name'] == 'fraisInscription');
     if (!has) {
       try {
-        await db.execute('ALTER TABLE classes ADD COLUMN fraisInscription REAL');
-        debugPrint('[DatabaseService] Added column: fraisInscription on classes');
+        await db.execute(
+          'ALTER TABLE classes ADD COLUMN fraisInscription REAL',
+        );
+        debugPrint(
+          '[DatabaseService] Added column: fraisInscription on classes',
+        );
       } catch (e) {
         debugPrint('[DatabaseService] Error adding fraisInscription: $e');
       }
@@ -815,7 +831,9 @@ class DatabaseService {
         await db.execute(
           "ALTER TABLE students ADD COLUMN typeInscription TEXT NOT NULL DEFAULT 'Réinscription'",
         );
-        debugPrint('[DatabaseService] Added column: typeInscription on students');
+        debugPrint(
+          '[DatabaseService] Added column: typeInscription on students',
+        );
       } catch (e) {
         debugPrint('[DatabaseService] Error adding typeInscription: $e');
       }
