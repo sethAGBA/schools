@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:archive/archive_io.dart';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
@@ -20,7 +21,7 @@ import 'package:school_manager/models/payment.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:school_manager/models/user.dart';
+
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -924,8 +925,14 @@ class _SettingsPageState extends State<SettingsPage>
 
   Future<void> _backupDatabase(BuildContext context) async {
     try {
-      final dbDir = await getDatabasesPath();
-      final dbPath = '$dbDir/ecole_manager.db';
+      String dbPath;
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        final appSupportDir = await getApplicationSupportDirectory();
+        dbPath = '${appSupportDir.path}/ecole_manager.db';
+      } else {
+        final dbDir = await getDatabasesPath();
+        dbPath = '$dbDir/ecole_manager.db';
+      }
       final dbFile = File(dbPath);
       if (!await dbFile.exists()) {
         _showModernSnackBar('Base de données non trouvée.', isError: true);
@@ -966,8 +973,14 @@ class _SettingsPageState extends State<SettingsPage>
       );
       if (result == null || result.files.single.path == null) return;
       final pickedFile = File(result.files.single.path!);
-      final dbDir = await getDatabasesPath();
-      final dbPath = '$dbDir/ecole_manager.db';
+      String dbPath;
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+        final appSupportDir = await getApplicationSupportDirectory();
+        dbPath = '${appSupportDir.path}/ecole_manager.db';
+      } else {
+        final dbDir = await getDatabasesPath();
+        dbPath = '$dbDir/ecole_manager.db';
+      }
       print('[SettingsPage] Restauration de la base à : $dbPath');
       // Supprimer l'ancien fichier avant de copier
       final dbFile = File(dbPath);
