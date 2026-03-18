@@ -966,6 +966,9 @@ class _SettingsPageState extends State<SettingsPage>
     try {
       // Fermer la base avant de restaurer
       await DatabaseService().closeDatabase();
+      // Un court délai peut être nécessaire sur Windows pour que le système libère le fichier
+      await Future.delayed(const Duration(milliseconds: 500));
+      
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['db'],
@@ -986,10 +989,16 @@ class _SettingsPageState extends State<SettingsPage>
       final dbFile = File(dbPath);
       await dbFile.parent.create(recursive: true);
       
-      // Supprimer l'ancien fichier avant de copier
-      if (await dbFile.exists()) {
-        await dbFile.delete();
+      // Tentative de remplacement du fichier avec gestion d'erreur spécifique au verrouillage
+      try {
+        if (await dbFile.exists()) {
+          await dbFile.delete();
+        }
+      } catch (e) {
+        debugPrint('[SettingsPage] Erreur lors de la suppression (verrou ?) : $e');
+        // On continue quand même, copy() pourrait réussir à écraser si delete() échoue
       }
+      
       await pickedFile.copy(dbPath);
       _showModernSnackBar(
         'Restauration réussie. Veuillez redémarrer l\'application.',

@@ -5899,6 +5899,7 @@ class DatabaseService {
       await _database!.close();
       _database = null;
     }
+    _openingDatabase = null;
   }
 
   // --- Class deletion helpers ---
