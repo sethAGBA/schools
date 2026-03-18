@@ -1247,8 +1247,7 @@ class PdfService {
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
                       pw.Text(
-                        ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
-                            .toUpperCase()),
+                        ((schoolInfo!.republic ?? 'RÉPUBLIQUE').toUpperCase()),
                         style: pw.TextStyle(
                           font: timesBold,
                           fontSize: 10,
@@ -1292,8 +1291,7 @@ class PdfService {
                 pw.Expanded(
                   child: pw.Align(
                     alignment: pw.Alignment.centerRight,
-                    child: ((schoolInfo!.educationDirection ?? '')
-                            .isNotEmpty)
+                    child: ((schoolInfo!.educationDirection ?? '').isNotEmpty)
                         ? pw.Text(
                             "Direction de l'enseignement: ${schoolInfo!.educationDirection}",
                             style: pw.TextStyle(
@@ -1427,10 +1425,11 @@ class PdfService {
               final totalPaid = row['totalPaid'] ?? 0.0;
               double montantMax = (row['totalDue'] as num?)?.toDouble() ?? 0.0;
               if (montantMax == 0.0) {
-                montantMax = (classe?.ecolage ?? 0) +
-                    (classe?.fraisCotisationParallele ?? 0);
+                montantMax =
+                    (classe?.ecolage ?? 0.0) +
+                    (classe?.fraisCotisationParallele ?? 0.0);
                 if (student.typeInscription == 'Nouvelle inscription') {
-                  double regFee = (classe?.fraisInscription ?? 0);
+                  double regFee = (classe?.fraisInscription ?? 0.0);
                   if (regFee <= 0 && schoolInfo?.registrationFees != null) {
                     regFee = schoolInfo!.registrationFees!;
                   }
@@ -1454,7 +1453,7 @@ class PdfService {
                 formatter.format(montantMax),
                 formatter.format(totalPaid),
                 formatter.format(remaining > 0 ? remaining : 0),
-                formatter.format((arrears ?? 0) > 0 ? arrears : 0),
+                formatter.format((arrears ?? 0.0) > 0 ? arrears : 0.0),
                 payment != null
                     ? payment.date.replaceFirst('T', ' ').substring(0, 16)
                     : '',
@@ -1713,7 +1712,8 @@ class PdfService {
         pageTheme: pw.PageTheme(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(24),
-          buildBackground: (schoolInfo != null &&
+          buildBackground:
+              (schoolInfo != null &&
                   schoolInfo.logoPath != null &&
                   File(schoolInfo.logoPath!).existsSync())
               ? (context) => pw.FullPage(
@@ -2677,8 +2677,7 @@ class PdfService {
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
                       pw.Text(
-                        ((schoolInfo!.republic ?? 'RÉPUBLIQUE')
-                            .toUpperCase()),
+                        ((schoolInfo!.republic ?? 'RÉPUBLIQUE').toUpperCase()),
                         style: pw.TextStyle(
                           font: timesBold,
                           fontSize: 10,
@@ -2722,8 +2721,7 @@ class PdfService {
                 pw.Expanded(
                   child: pw.Align(
                     alignment: pw.Alignment.centerRight,
-                    child: ((schoolInfo!.educationDirection ?? '')
-                            .isNotEmpty)
+                    child: ((schoolInfo!.educationDirection ?? '').isNotEmpty)
                         ? pw.Text(
                             "Direction de l'enseignement: ${schoolInfo!.educationDirection}",
                             style: pw.TextStyle(

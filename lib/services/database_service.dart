@@ -114,7 +114,9 @@ class DatabaseService {
   Future<Database> get database async {
     // Si une restauration est en cours, on attend ou on échoue
     if (_isRestoring) {
-      debugPrint('[DatabaseService] Accès à la base refusé : restauration en cours');
+      debugPrint(
+        '[DatabaseService] Accès à la base refusé : restauration en cours',
+      );
       // On attend que la restauration soit finie via une boucle simple (ou on pourrait utiliser un Completer)
       while (_isRestoring) {
         await Future.delayed(const Duration(milliseconds: 100));
@@ -274,8 +276,17 @@ class DatabaseService {
       // MIGRATION: Chercher l'ancienne base de données dans plusieurs emplacements possibles
       final possibleOldPaths = [
         join(await getDatabasesPath(), 'ecole_manager.db'),
-        join(Directory.current.path, 'databases', 'ecole_manager.db'), // FFI default
-        join(Directory.current.path, '.dart_tool', 'sqflite', 'ecole_manager.db'),
+        join(
+          Directory.current.path,
+          'databases',
+          'ecole_manager.db',
+        ), // FFI default
+        join(
+          Directory.current.path,
+          '.dart_tool',
+          'sqflite',
+          'ecole_manager.db',
+        ),
       ];
 
       final newFile = File(path);
@@ -288,10 +299,14 @@ class DatabaseService {
                 await appSupportDir.create(recursive: true);
               }
               await oldFile.copy(path);
-              debugPrint('[DatabaseService] Ancienne base de données migrée depuis $oldPath vers AppData avec succès.');
+              debugPrint(
+                '[DatabaseService] Ancienne base de données migrée depuis $oldPath vers AppData avec succès.',
+              );
               break; // Stop looking once we found and copied it
             } catch (e) {
-              debugPrint('[DatabaseService] Erreur lors de la migration depuis $oldPath : $e');
+              debugPrint(
+                '[DatabaseService] Erreur lors de la migration depuis $oldPath : $e',
+              );
             }
           }
         }
@@ -309,11 +324,11 @@ class DatabaseService {
         // 1. S'assurer que les colonnes critiques existent dans les tables existantes (ex: après restauration)
         await _ensureGradesTermColumn(db);
         await _ensureEvaluationTemplatesTermColumn(db);
-        
+
         // 2. Effectuer les nettoyages de doublons qui dépendent de ces colonnes
         await _cleanupGradesDuplicates(db);
         await _cleanupEvaluationTemplatesDuplicates(db);
-        
+
         // 3. S'assurer que les tables et index complets existent
         await _ensureEvaluationTemplatesTable(db);
       },
@@ -1092,7 +1107,9 @@ class DatabaseService {
         debugPrint('[DatabaseService] Colonne term ajoutée à la table grades.');
       }
     } catch (e) {
-      debugPrint('[DatabaseService] Erreur lors de l’ajout de term à grades : $e');
+      debugPrint(
+        '[DatabaseService] Erreur lors de l’ajout de term à grades : $e',
+      );
     }
   }
 

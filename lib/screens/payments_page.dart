@@ -284,9 +284,10 @@ class _PaymentsPageState extends State<PaymentsPage>
 
   double _baseTotalDueForStudent(Student student) {
     final classe = _classesByName[student.className];
-    double total = (classe?.ecolage ?? 0) + (classe?.fraisCotisationParallele ?? 0);
+    double total =
+        (classe?.ecolage ?? 0.0) + (classe?.fraisCotisationParallele ?? 0.0);
     if (student.typeInscription == 'Nouvelle inscription') {
-      double regFee = (classe?.fraisInscription ?? 0);
+      double regFee = (classe?.fraisInscription ?? 0.0);
       if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
         regFee = _schoolInfo!.registrationFees!;
       }
@@ -921,7 +922,7 @@ class _PaymentsPageState extends State<PaymentsPage>
         final montantMax = _adjustedTotalDueForStudent(student);
         final totalPaid = _payments
             .where((pay) => pay.studentId == student.id && !pay.isCancelled)
-            .fold<double>(0, (sum, pay) => sum + pay.amount);
+            .fold<double>(0.0, (sum, pay) => sum + pay.amount);
         return montantMax > 0 && totalPaid >= montantMax;
       }).toList();
     } else if (_currentTab == 4) {
@@ -1666,7 +1667,7 @@ class _PaymentsPageState extends State<PaymentsPage>
     final montantMax = _adjustedTotalDueForStudent(student);
     final totalPaid = _payments
         .where((pay) => pay.studentId == student.id && !pay.isCancelled)
-        .fold<double>(0, (sum, pay) => sum + pay.amount);
+        .fold<double>(0.0, (sum, pay) => sum + pay.amount);
     final bool isPaid = montantMax > 0 && totalPaid >= montantMax;
     final bool hasPayment = p != null;
     final arrears = _arrearsByNow(student);
@@ -1983,7 +1984,7 @@ class _PaymentsPageState extends State<PaymentsPage>
     final classe = _classesByName[student.className];
     double regFee = 0;
     if (student.typeInscription == 'Nouvelle inscription') {
-      regFee = (classe?.fraisInscription ?? 0);
+      regFee = (classe?.fraisInscription ?? 0.0);
       if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
         regFee = _schoolInfo!.registrationFees!;
       }
@@ -2017,7 +2018,7 @@ class _PaymentsPageState extends State<PaymentsPage>
     final commentController = TextEditingController();
     final totalPaid = _payments
         .where((p) => p.studentId == student.id && !p.isCancelled)
-        .fold<double>(0, (sum, pay) => sum + pay.amount);
+        .fold<double>(0.0, (sum, pay) => sum + pay.amount);
     final reste = montantMax - totalPaid;
     final double totalDiscounts = _totalDiscountsForStudent(student);
     if (reste <= 0) {
@@ -2087,20 +2088,26 @@ class _PaymentsPageState extends State<PaymentsPage>
             Text(
               'Total dû (ajusté) : ${montantMax.toStringAsFixed(2)} FCFA',
               style: TextStyle(
-                  color: theme.textTheme.bodyMedium?.color,
-                  fontWeight: FontWeight.bold),
+                color: theme.textTheme.bodyMedium?.color,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             if (regFee > 0) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      size: 16, color: theme.colorScheme.primary),
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: theme.colorScheme.primary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Frais d\'Inscription : ${regFee.toStringAsFixed(0)} FCFA',
                     style: TextStyle(
-                        color: theme.colorScheme.primary, fontSize: 13),
+                      color: theme.colorScheme.primary,
+                      fontSize: 13,
+                    ),
                   ),
                   const Spacer(),
                   TextButton(
@@ -2109,7 +2116,9 @@ class _PaymentsPageState extends State<PaymentsPage>
                       commentController.text = 'Frais d\'inscription';
                     },
                     style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero, minimumSize: Size(0, 0)),
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size(0, 0),
+                    ),
                     child: const Text('Régler uniquement'),
                   ),
                 ],
@@ -2247,7 +2256,7 @@ class _PaymentsPageState extends State<PaymentsPage>
     final double montantMax = _adjustedTotalDueForStudent(student);
     final totalPaid = _payments
         .where((p) => p.studentId == student.id && !p.isCancelled)
-        .fold<double>(0, (sum, pay) => sum + pay.amount);
+        .fold<double>(0.0, (sum, pay) => sum + pay.amount);
     final reste = montantMax - totalPaid;
     final status = (montantMax > 0 && totalPaid >= montantMax)
         ? 'Payé'
@@ -2682,9 +2691,9 @@ class _PaymentsPageState extends State<PaymentsPage>
         .where((p) => !p.isCancelled)
         .fold(0.0, (sum, item) => sum + item.amount);
     double totalDue =
-        (classe.ecolage ?? 0) + (classe.fraisCotisationParallele ?? 0);
+        (classe.ecolage ?? 0.0) + (classe.fraisCotisationParallele ?? 0.0);
     if (student.typeInscription == 'Nouvelle inscription') {
-      double regFee = (classe.fraisInscription ?? 0);
+      double regFee = (classe.fraisInscription ?? 0.0);
       if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
         regFee = _schoolInfo!.registrationFees!;
       }
@@ -2712,10 +2721,12 @@ class _PaymentsPageState extends State<PaymentsPage>
             : (p.id?.toString() ?? p.date.hashCode.toString());
         final safeStudentName = PdfService.sanitizeFileName(student.name);
         final fileName =
-            PdfService.sanitizeFileName('Recu_Paiement_${receiptNo}_$safeStudentName') +
-                '_' +
-                p.date.substring(0, 10).replaceAll('-', '') +
-                '.pdf';
+            PdfService.sanitizeFileName(
+              'Recu_Paiement_${receiptNo}_$safeStudentName',
+            ) +
+            '_' +
+            p.date.substring(0, 10).replaceAll('-', '') +
+            '.pdf';
         final file = File('$directoryPath/$fileName');
         await PdfService.ensureParentDirectory(file);
         await file.writeAsBytes(pdfBytes);
@@ -2785,9 +2796,9 @@ class _PaymentsPageState extends State<PaymentsPage>
         .where((p) => !p.isCancelled)
         .fold(0.0, (sum, item) => sum + item.amount);
     double totalDue =
-        (classe.ecolage ?? 0) + (classe.fraisCotisationParallele ?? 0);
+        (classe.ecolage ?? 0.0) + (classe.fraisCotisationParallele ?? 0.0);
     if (student.typeInscription == 'Nouvelle inscription') {
-      double regFee = (classe.fraisInscription ?? 0);
+      double regFee = (classe.fraisInscription ?? 0.0);
       if (regFee <= 0 && _schoolInfo?.registrationFees != null) {
         regFee = _schoolInfo!.registrationFees!;
       }
@@ -2815,10 +2826,12 @@ class _PaymentsPageState extends State<PaymentsPage>
         : (p.id?.toString() ?? p.date.hashCode.toString());
     final safeStudentName = PdfService.sanitizeFileName(student.name);
     final fileName =
-        PdfService.sanitizeFileName('Ticket_Paiement_${receiptNo}_$safeStudentName') +
-            '_' +
-            p.date.substring(0, 10).replaceAll('-', '') +
-            '.pdf';
+        PdfService.sanitizeFileName(
+          'Ticket_Paiement_${receiptNo}_$safeStudentName',
+        ) +
+        '_' +
+        p.date.substring(0, 10).replaceAll('-', '') +
+        '.pdf';
     final file = File('$directoryPath/$fileName');
     await PdfService.ensureParentDirectory(file);
     await file.writeAsBytes(pdfBytes);
@@ -3083,7 +3096,7 @@ class _PaymentsPageState extends State<PaymentsPage>
         final classe = _classesByName[student.className];
         final totalPaid = _payments
             .where((pay) => pay.studentId == student.id && !pay.isCancelled)
-            .fold<double>(0, (sum, pay) => sum + pay.amount);
+            .fold<double>(0.0, (sum, pay) => sum + pay.amount);
         final totalDue = _adjustedTotalDueForStudent(student);
         final expectedPaid = _expectedPaidByDate(student, DateTime.now());
         final arrears = expectedPaid - totalPaid;
@@ -3158,7 +3171,7 @@ class _PaymentsPageState extends State<PaymentsPage>
         final classe = _classesByName[student.className];
         final totalPaid = _payments
             .where((pay) => pay.studentId == student.id && !pay.isCancelled)
-            .fold<double>(0, (sum, pay) => sum + pay.amount);
+            .fold<double>(0.0, (sum, pay) => sum + pay.amount);
         final totalDue = _adjustedTotalDueForStudent(student);
         final expectedPaid = _expectedPaidByDate(student, DateTime.now());
         final arrears = expectedPaid - totalPaid;
@@ -3269,7 +3282,7 @@ class _PaymentsPageState extends State<PaymentsPage>
         final classe = _classesByName[student.className];
         final totalPaid = _payments
             .where((pay) => pay.studentId == student.id && !pay.isCancelled)
-            .fold<double>(0, (sum, pay) => sum + pay.amount);
+            .fold<double>(0.0, (sum, pay) => sum + pay.amount);
         final totalDue = _adjustedTotalDueForStudent(student);
         final remaining = (totalDue - totalPaid) > 0
             ? (totalDue - totalPaid)

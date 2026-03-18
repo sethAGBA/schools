@@ -1617,9 +1617,9 @@ class _StatisticsPageState extends State<StatisticsPage>
   }
 
   Widget _buildFinanceTab() {
-    final totalIncome = (_financeStats['totalIncome'] as num?)?.toDouble() ?? 0.0;
-    final totalExpense = (_financeStats['totalExpense'] as num?)?.toDouble() ?? 0.0;
-    final balance = (_financeStats['balance'] as num?)?.toDouble() ?? 0.0;
+    final totalIncome = _financeStats['totalIncome'] as double? ?? 0.0;
+    final totalExpense = _financeStats['totalExpense'] as double? ?? 0.0;
+    final balance = _financeStats['balance'] as double? ?? 0.0;
     final incomeByMonth =
         (_financeStats['incomeByMonth'] as Map?)?.cast<String, dynamic>() ?? {};
     final expenseByMonth =

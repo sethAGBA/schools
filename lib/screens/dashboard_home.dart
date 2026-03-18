@@ -201,10 +201,10 @@ class _DashboardHomeState extends State<DashboardHome>
   }
 
   Future<void> _deleteTodo(String id) async {
-    final todo = _todos.where((t) => t.id == id).cast<_DashboardTodo?>().firstWhere(
-          (t) => t != null,
-          orElse: () => null,
-        );
+    final todo = _todos
+        .where((t) => t.id == id)
+        .cast<_DashboardTodo?>()
+        .firstWhere((t) => t != null, orElse: () => null);
     if (todo == null) return;
 
     final ok = await showDialog<bool>(
@@ -270,15 +270,17 @@ class _DashboardHomeState extends State<DashboardHome>
       final studentIdsThisYear = students.map((s) => s.id).toSet();
       final totalRevenue = payments
           .where((p) => studentIdsThisYear.contains(p.studentId))
-          .fold<double>(0, (sum, item) => sum + item.amount);
+          .fold<double>(0.0, (sum, item) => sum + item.amount);
 
       // Fetch recent activities
       final recentPayments = (await _dbService.getRecentPayments(5))
-          .where((p) => studentIdsThisYear.contains(p.studentId) && !p.isCancelled)
+          .where(
+            (p) => studentIdsThisYear.contains(p.studentId) && !p.isCancelled,
+          )
           .toList();
-      final recentCancelled = (await _dbService.getRecentCancelledPayments(5))
-          .where((p) => studentIdsThisYear.contains(p.studentId))
-          .toList();
+      final recentCancelled = (await _dbService.getRecentCancelledPayments(
+        5,
+      )).where((p) => studentIdsThisYear.contains(p.studentId)).toList();
 
       // Filter staff by current academic year (hire date within academic year)
       final allRecentStaff = await _dbService.getRecentStaff(
@@ -516,12 +518,15 @@ class _DashboardHomeState extends State<DashboardHome>
       // Discipline: sanctions des 7 derniers jours (année en cours)
       int sanctions7d = 0;
       try {
-        final list = await _dbService.getSanctionEvents(academicYear: currentYear);
+        final list = await _dbService.getSanctionEvents(
+          academicYear: currentYear,
+        );
         final cutoff = DateTime.now().subtract(const Duration(days: 7));
         for (final row in list) {
           final dateRaw = row['date']?.toString();
           if (dateRaw == null || dateRaw.trim().isEmpty) continue;
-          final dt = DateTime.tryParse(dateRaw) ??
+          final dt =
+              DateTime.tryParse(dateRaw) ??
               DateTime.tryParse(dateRaw.replaceFirst(' ', 'T'));
           if (dt == null) continue;
           if (dt.isAfter(cutoff)) sanctions7d += 1;
@@ -1260,7 +1265,8 @@ class _DashboardHomeState extends State<DashboardHome>
                   title: 'Finance & Matériel',
                   icon: Icons.inventory_2_outlined,
                   color: Color(0xFFF59E0B),
-                  onTap: () => widget.onNavigate(10), // Navigate to Finance & Inventory
+                  onTap: () =>
+                      widget.onNavigate(10), // Navigate to Finance & Inventory
                 ),
               ),
             ],
@@ -1274,10 +1280,7 @@ class _DashboardHomeState extends State<DashboardHome>
     final theme = Theme.of(context);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final days = List.generate(
-      7,
-      (i) => today.add(Duration(days: i)),
-    );
+    final days = List.generate(7, (i) => today.add(Duration(days: i)));
     int countFor(DateTime d) =>
         _dueSoonItems.where((it) => _sameDay(it.date, d)).length;
 
@@ -1327,8 +1330,10 @@ class _DashboardHomeState extends State<DashboardHome>
                 final c = countFor(d);
                 final label = DateFormat('EEE dd', 'fr_FR').format(d);
                 return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
@@ -1419,7 +1424,9 @@ class _DashboardHomeState extends State<DashboardHome>
     final doneCount = _todos.where((t) => t.done).length;
     final pendingCount = total - doneCount;
 
-    final List<_DashboardTodo> list = _showAllTodos ? _todos : _todos.take(6).toList();
+    final List<_DashboardTodo> list = _showAllTodos
+        ? _todos
+        : _todos.take(6).toList();
     final remainingCount = _todos.length - list.length;
 
     return Container(
@@ -1512,9 +1519,15 @@ class _DashboardHomeState extends State<DashboardHome>
                 ...list.map((t) {
                   final due = t.dueDate == null
                       ? null
-                      : DateTime(t.dueDate!.year, t.dueDate!.month, t.dueDate!.day);
-                  final isOverdue = !t.done && due != null && due.isBefore(today);
-                  final isDueSoon = !t.done &&
+                      : DateTime(
+                          t.dueDate!.year,
+                          t.dueDate!.month,
+                          t.dueDate!.day,
+                        );
+                  final isOverdue =
+                      !t.done && due != null && due.isBefore(today);
+                  final isDueSoon =
+                      !t.done &&
                       due != null &&
                       !isOverdue &&
                       due.isBefore(today.add(const Duration(days: 3)));
@@ -1522,10 +1535,10 @@ class _DashboardHomeState extends State<DashboardHome>
                   final Color accent = t.done
                       ? const Color(0xFF10B981)
                       : isOverdue
-                          ? const Color(0xFFEF4444)
-                          : isDueSoon
-                              ? const Color(0xFFF59E0B)
-                              : const Color(0xFF0EA5E9);
+                      ? const Color(0xFFEF4444)
+                      : isDueSoon
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFF0EA5E9);
 
                   final dueLabel = due == null
                       ? 'Sans échéance'
@@ -1616,8 +1629,9 @@ class _DashboardHomeState extends State<DashboardHome>
                       child: Text(
                         '+$remainingCount autre(s) tâche(s)…',
                         style: TextStyle(
-                          color: theme.textTheme.bodySmall?.color
-                              ?.withOpacity(0.7),
+                          color: theme.textTheme.bodySmall?.color?.withOpacity(
+                            0.7,
+                          ),
                         ),
                       ),
                     ),
@@ -2016,7 +2030,9 @@ class _DashboardHomeState extends State<DashboardHome>
         final theme = Theme.of(ctx);
         return Dialog(
           insetPadding: const EdgeInsets.all(24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 920),
             child: Container(
@@ -2153,10 +2169,12 @@ class _DashboardHomeState extends State<DashboardHome>
                                     ),
                                   )
                                 : Column(
-                                    children:
-                                        _topUnpaidStudents.take(10).map((s) {
+                                    children: _topUnpaidStudents.take(10).map((
+                                      s,
+                                    ) {
                                       return _notificationListTile(
-                                        title: '${s.studentName} • ${s.className}',
+                                        title:
+                                            '${s.studentName} • ${s.className}',
                                         subtitle:
                                             'Reste: ${fmt.format(s.remaining)}',
                                         trailing: TextButton(
@@ -2303,10 +2321,7 @@ class _DashboardHomeState extends State<DashboardHome>
               ),
             ],
           ),
-          if (child is! SizedBox) ...[
-            const SizedBox(height: 10),
-            child,
-          ],
+          if (child is! SizedBox) ...[const SizedBox(height: 10), child],
         ],
       ),
     );
@@ -2323,10 +2338,7 @@ class _DashboardHomeState extends State<DashboardHome>
       contentPadding: EdgeInsets.zero,
       leading: leading == null
           ? null
-          : Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: leading,
-            ),
+          : Padding(padding: const EdgeInsets.only(top: 6), child: leading),
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle),
       trailing: trailing,
@@ -2486,7 +2498,8 @@ class _DashboardTodo {
       dueDate: parseDate(json['dueDate'] as String?),
       done: (json['done'] as bool?) ?? false,
       createdAt:
-          parseDate(json['createdAt'] as String?) ?? DateTime.fromMillisecondsSinceEpoch(0),
+          parseDate(json['createdAt'] as String?) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 }
