@@ -306,8 +306,15 @@ class DatabaseService {
       path,
       version: 12, // v12: student new columns (placeOfBirth)
       onOpen: (db) async {
+        // 1. S'assurer que les colonnes critiques existent dans les tables existantes (ex: après restauration)
+        await _ensureGradesTermColumn(db);
+        await _ensureEvaluationTemplatesTermColumn(db);
+        
+        // 2. Effectuer les nettoyages de doublons qui dépendent de ces colonnes
         await _cleanupGradesDuplicates(db);
         await _cleanupEvaluationTemplatesDuplicates(db);
+        
+        // 3. S'assurer que les tables et index complets existent
         await _ensureEvaluationTemplatesTable(db);
       },
       onConfigure: (db) async {
@@ -1041,6 +1048,10 @@ class DatabaseService {
         FOREIGN KEY (className, academicYear) REFERENCES classes(name, academicYear) ON UPDATE CASCADE ON DELETE RESTRICT
       )
     ''');
+
+    // S'assurer que la colonne term existe avant de créer des index qui l'utilisent
+    await _ensureEvaluationTemplatesTermColumn(db);
+
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_eval_templates_lookup ON evaluation_templates(className, academicYear, term, subjectId)',
     );
@@ -1067,6 +1078,21 @@ class DatabaseService {
           '[DatabaseService] Error adding term to evaluation_templates: $e',
         );
       }
+    }
+  }
+
+  Future<void> _ensureGradesTermColumn(Database db) async {
+    try {
+      final cols = await db.rawQuery('PRAGMA table_info(grades)');
+      final hasTerm = cols.any((c) => c['name'] == 'term');
+      if (!hasTerm) {
+        await db.execute(
+          "ALTER TABLE grades ADD COLUMN term TEXT NOT NULL DEFAULT ''",
+        );
+        debugPrint('[DatabaseService] Colonne term ajoutée à la table grades.');
+      }
+    } catch (e) {
+      debugPrint('[DatabaseService] Erreur lors de l’ajout de term à grades : $e');
     }
   }
 
