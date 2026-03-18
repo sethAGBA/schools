@@ -401,9 +401,9 @@ class StatisticsPdfService {
   }
 
   pw.Widget _buildFinanceContent(Map<String, dynamic> stats, _PdfFonts fonts) {
-    final totalIncome = stats['totalIncome'] as double? ?? 0.0;
-    final totalExpense = stats['totalExpense'] as double? ?? 0.0;
-    final balance = stats['balance'] as double? ?? 0.0;
+    final totalIncome = (stats['totalIncome'] as num?)?.toDouble() ?? 0.0;
+    final totalExpense = (stats['totalExpense'] as num?)?.toDouble() ?? 0.0;
+    final balance = (stats['balance'] as num?)?.toDouble() ?? 0.0;
     final incomeByMonth = stats['incomeByMonth'] as Map? ?? {};
     final expenseByMonth = stats['expenseByMonth'] as Map? ?? {};
 

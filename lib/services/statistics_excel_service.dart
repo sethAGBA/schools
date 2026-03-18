@@ -25,12 +25,12 @@ class StatisticsExcelService {
     sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
     row++;
     sheet.getRangeByIndex(row, 1).setText('Moyenne Générale');
-    sheet.getRangeByIndex(row, 2).setNumber(stats['globalAverage'] ?? 0.0);
+    sheet.getRangeByIndex(row, 2).setNumber((stats['globalAverage'] as num? ?? 0.0).toDouble());
     row++;
     sheet.getRangeByIndex(row, 1).setText('Taux de Réussite');
     sheet
         .getRangeByIndex(row, 2)
-        .setText('${(stats['globalSuccessRate'] ?? 0.0).toStringAsFixed(1)}%');
+        .setText('${(stats['globalSuccessRate'] as num? ?? 0.0).toStringAsFixed(1)}%');
     row += 2;
 
     // Top Students
@@ -177,13 +177,13 @@ class StatisticsExcelService {
     sheet.getRangeByIndex(row, 1).cellStyle.bold = true;
     row++;
     sheet.getRangeByIndex(row, 1).setText('Total Revenus');
-    sheet.getRangeByIndex(row, 2).setNumber(stats['totalIncome'] ?? 0.0);
+    sheet.getRangeByIndex(row, 2).setNumber((stats['totalIncome'] as num? ?? 0.0).toDouble());
     row++;
     sheet.getRangeByIndex(row, 1).setText('Total Dépenses');
-    sheet.getRangeByIndex(row, 2).setNumber(stats['totalExpense'] ?? 0.0);
+    sheet.getRangeByIndex(row, 2).setNumber((stats['totalExpense'] as num? ?? 0.0).toDouble());
     row++;
     sheet.getRangeByIndex(row, 1).setText('Solde');
-    sheet.getRangeByIndex(row, 2).setNumber(stats['balance'] ?? 0.0);
+    sheet.getRangeByIndex(row, 2).setNumber((stats['balance'] as num? ?? 0.0).toDouble());
     row += 2;
 
     // Expenses by Category
