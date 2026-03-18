@@ -30,7 +30,9 @@ import 'package:school_manager/models/library_book.dart';
 import 'package:school_manager/models/library_loan.dart';
 import 'package:school_manager/models/teacher_assignment.dart';
 // Removed UI and prefs from data layer
-// NOUVELLE MÉTHODE: import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io' show Platform, File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 // ANCIENNE MÉTHODE: utilise getDatabasesPath() de sqflite (pas besoin d'import supplémentaire)
 
 /// Service de gestion de la base de données
@@ -235,23 +237,35 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     // ============================================================================
-    // ANCIENNE MÉTHODE (ACTIVE) - Utilise getDatabasesPath() de sqflite
+    // RESOLUTION DU BUG WINDOWS:
+    // Sur desktop, getDatabasesPath() tente d'écrire dans le dossier d'installation
+    // (ex: Program Files) ce qui bloque (permissions) et fait tourner l'app en rond.
+    // On utilise getApplicationSupportDirectory() (ex: AppData) pour Desktop.
     // ============================================================================
-    String path = join(await getDatabasesPath(), 'ecole_manager.db');
-    // ============================================================================
-
-    // ============================================================================
-    // NOUVELLE MÉTHODE (COMMENTÉE) - Utilise getApplicationDocumentsDirectory()
-    // ============================================================================
-    // String path;
-    // if (_useInMemory) {
-    //   path = ':memory:';
-    // } else if (_dbPathOverride != null) {
-    //   path = _dbPathOverride!;
-    // } else {
-    //   final documents = await getApplicationDocumentsDirectory();
-    //   path = join(documents.path, 'ecole_manager.db');
-    // }
+    String path;
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      final appSupportDir = await getApplicationSupportDirectory();
+      path = join(appSupportDir.path, 'ecole_manager.db');
+      
+      // MIGRATION: Copier l'ancienne base de données si elle existe
+      final oldPath = join(await getDatabasesPath(), 'ecole_manager.db');
+      final newFile = File(path);
+      final oldFile = File(oldPath);
+      
+      if (!await newFile.exists() && await oldFile.exists()) {
+        try {
+          if (!await appSupportDir.exists()) {
+            await appSupportDir.create(recursive: true);
+          }
+          await oldFile.copy(path);
+          debugPrint('[DatabaseService] Ancienne base de données migrée vers AppData avec succès.');
+        } catch (e) {
+          debugPrint('[DatabaseService] Erreur lors de la migration : $e');
+        }
+      }
+    } else {
+      path = join(await getDatabasesPath(), 'ecole_manager.db');
+    }
     // ============================================================================
 
     debugPrint('[DatabaseService] Ouverture de la base à : $path');
