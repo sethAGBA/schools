@@ -838,9 +838,92 @@ class DatabaseService {
     await _ensureClassEcolageColumn(db);
     await _ensureClassFraisInscriptionColumn(db);
     await _ensureStudentTypeInscriptionColumn(db);
+    await _ensureMockExamSessionsTable(db);
     debugPrint(
       '[DatabaseService][MIGRATION] All post-open migrations completed',
     );
+  }
+
+  Future<void> _ensureMockExamSessionsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mock_exam_sessions(
+        name TEXT PRIMARY KEY,
+        order_index INTEGER DEFAULT 0
+      )
+    ''');
+    
+    // Seed default sessions if empty
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM mock_exam_sessions'));
+    if (count == 0) {
+      await db.insert('mock_exam_sessions', {'name': 'Examen Blanc 1', 'order_index': 1});
+      await db.insert('mock_exam_sessions', {'name': 'Examen Blanc 2', 'order_index': 2});
+      await db.insert('mock_exam_sessions', {'name': 'Examen Blanc 3', 'order_index': 3});
+    }
+  }
+
+  Future<List<String>> getMockExamSessions() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'mock_exam_sessions',
+      orderBy: 'order_index ASC, name ASC',
+    );
+    return maps.map((map) => map['name'] as String).toList();
+  }
+
+  Future<void> addMockExamSession(String name) async {
+    final db = await database;
+    final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM mock_exam_sessions'));
+    await db.insert(
+      'mock_exam_sessions', 
+      {'name': name, 'order_index': (count ?? 0) + 1},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> renameMockExamSession(String oldName, String newName) async {
+    if (oldName == newName) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      // 1. Get the old index
+      final oldList = await txn.query('mock_exam_sessions', where: 'name = ?', whereArgs: [oldName]);
+      int orderIndex = 0;
+      if (oldList.isNotEmpty) {
+        orderIndex = oldList.first['order_index'] as int;
+      }
+
+      // 2. Insert new with same index
+      await txn.insert(
+        'mock_exam_sessions', 
+        {'name': newName, 'order_index': orderIndex},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      // 3. Update all grades that reference the old session name in the 'term' column.
+      // (Assuming mock exams save the session name in the 'term' column)
+      await txn.update(
+        'grades',
+        {'term': newName},
+        where: "term = ?",
+        whereArgs: [oldName],
+      );
+
+      // 4. Delete the old session
+      await txn.delete('mock_exam_sessions', where: 'name = ?', whereArgs: [oldName]);
+    });
+  }
+
+  Future<void> deleteMockExamSession(String name) async {
+    final db = await database;
+    await db.delete('mock_exam_sessions', where: 'name = ?', whereArgs: [name]);
+  }
+
+  Future<bool> isMockExamSessionUsed(String name) async {
+    final db = await database;
+    final count = Sqflite.firstIntValue(await db.rawQuery(
+      'SELECT COUNT(*) FROM grades WHERE term = ?',
+      [name],
+    ));
+    return (count != null && count > 0);
   }
 
   Future<void> _ensureClassEcolageColumn(Database db) async {

@@ -178,6 +178,12 @@ class Sidebar extends StatelessWidget {
                   _buildMenuItem(context, 1, Icons.people, 'Élèves & Classes'),
                   _buildMenuItem(context, 2, Icons.person, 'Personnel'),
                   _buildMenuItem(context, 3, Icons.grade, 'Notes & Bulletins'),
+                  _buildMenuItem(
+                    context,
+                    17,
+                    Icons.assignment_turned_in_outlined,
+                    'Examens Blancs',
+                  ),
                   _buildMenuItem(context, 4, Icons.payment, 'Paiements'),
                   if ((currentRole ?? '') == 'admin' ||
                       (currentPermissions?.contains('view_users') ?? false))

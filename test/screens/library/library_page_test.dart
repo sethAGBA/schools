@@ -249,7 +249,7 @@ void main() {
     expect(
       find.descendant(
         of: loansList,
-        matching: find.textContaining('Jean Dupont'),
+        matching: find.textContaining('Dupont Jean'),
       ),
       findsOneWidget,
     );

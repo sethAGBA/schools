@@ -59,6 +59,14 @@ class SchoolInfo {
     this.registrationFees,
   });
 
+  factory SchoolInfo.empty() {
+    return SchoolInfo(
+      name: '',
+      address: '',
+      director: '',
+    );
+  }
+
   factory SchoolInfo.fromMap(Map<String, dynamic> map) {
     return SchoolInfo(
       name: map['name'] ?? '',

@@ -3361,7 +3361,8 @@ class _StudentProfilePageState extends State<StudentProfilePage>
                                       .where(
                                         (g) =>
                                             g.studentId == studentId &&
-                                            g.term == term,
+                                            g.term == term &&
+                                            g.type != 'Examen Blanc',
                                       )
                                       .toList();
                                   if (studentGrades.isEmpty) return 0.0;

@@ -247,11 +247,11 @@ class ReportCardPdfService {
       student.className,
       academicYear,
     );
-    final List<Grade> classPeriodGrades = await _db.getAllGradesForPeriod(
+    final List<Grade> classPeriodGrades = (await _db.getAllGradesForPeriod(
       className: student.className,
       academicYear: academicYear,
       term: selectedTerm,
-    );
+    )).where((g) => g.type != 'Examen Blanc').toList();
 
     // Récupérer la liste officielle des élèves de la classe pour filtrer les calculs
     final List<Student> currentClassStudents = await _db
@@ -292,11 +292,11 @@ class ReportCardPdfService {
     final Map<String, double> cAnnualByStudent = {};
     const double epsRank = 0.001;
     for (final term in allTerms) {
-      final gradesForTerm = await _db.getAllGradesForPeriod(
+      final gradesForTerm = (await _db.getAllGradesForPeriod(
         className: student.className,
         academicYear: academicYear,
         term: term,
-      );
+      )).where((g) => g.type != 'Examen Blanc').toList();
       // Accumulate annual (inchangé)
       for (final g in gradesForTerm.where(
         (g) =>

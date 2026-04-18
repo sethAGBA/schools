@@ -11442,12 +11442,12 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
     // Charger les notes et les matières directement depuis la base de données
     // (Les listes 'grades' et 'subjects' en mémoire peuvent être incomplètes lors d'un export massif)
-    final List<Grade> allGradesForPeriod = await _dbService
+    final List<Grade> allGradesForPeriod = (await _dbService
         .getAllGradesForPeriod(
           className: selectedClass!,
           academicYear: effectiveYear,
           term: selectedTerm!,
-        );
+        )).where((g) => g.type != 'Examen Blanc').toList();
 
     final studentGrades = allGradesForPeriod
         .where((g) => g.studentId == student.id)
@@ -11487,11 +11487,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     final Map<String, double> cAnnualByStudent = {};
     for (final term in allTerms) {
       // Charger toutes les notes de la classe pour la période, puis filtrer l'élève
-      final periodGrades = await _dbService.getAllGradesForPeriod(
+      final periodGrades = (await _dbService.getAllGradesForPeriod(
         className: selectedClass!,
         academicYear: effectiveYear,
         term: term,
-      );
+      )).where((g) => g.type != 'Examen Blanc').toList();
 
       // Charger les templates pour cette période précise afin de filtrer proprement
       final termTemplates = await _dbService.getEvaluationTemplates(

@@ -14,22 +14,24 @@ Ce document suit l'évolution du projet et planifie les prochaines étapes de d�
 - [x] Audit Trail (Journal d'audit pour les transactions).
 - [x] Paramètres généraux de l'établissement.
 
-## 🚀 En cours : Examens Blancs & Finalisation Bulletins
-- [ ] Ajout du type de évaluation "Examen Blanc".
-- [ ] Calcul des moyennes spécifiques pour les examens blancs.
-- [ ] Exportation séparée des résultats d'examen blanc (Hors bulletin trimestriel).
-- [ ] Amélioration de la persistance des appréciations automatiques.
+## 🚀 En cours : Module Examens Blancs
+- [ ] **Écran Dédié** : Créer `mock_exams_page.dart` pour la gestion isolée des sessions d'examens.
+- [ ] **Navigation** : Ajouter une entrée "Examens Blancs" dans la Sidebar.
+- [ ] **Saisie Groupée** : Interface optimisée pour la saisie massive des notes par session (Examen Blanc 1, 2, etc.).
+- [ ] **Logique de Calcul** : Moyenne spécifique à l'examen blanc, calculée séparément du trimestre.
+- [ ] **Exportation** : Génération de palmarès PDF/Excel dédiés, sans impact sur le bulletin standard.
+- [ ] **Persistance** : Amélioration de la persistance des appréciations automatiques.
 
 ## 📅 Prochaines Étapes (Priorité Haute)
-- [ ] **Suivi de la Discipline** : Absences, retards, sanctions et avertissements.
-- [ ] **Gestion du Personnel** : Présences, absences, attribution des classes.
-- [ ] **Statistiques Avancées** : Tableaux de bord visuels, taux de réussite par matière.
-- [ ] **Paiements & Finances** : Suivi des frais de scolarité, alertes impayés, rapports financiers.
+- [x] **Suivi de la Discipline** : Absences, retards, sanctions et avertissements.
+- [x] **Gestion du Personnel** : Présences, absences, attribution des classes.
+- [x] **Statistiques Avancées** : Tableaux de bord visuels, taux de réussite par matière.
+- [x] **Paiements & Finances** : Suivi des frais de scolarité, alertes impayés, rapports financiers.
 
 ## 🛠️ Futur (Priorité Basse / Optionnel)
-- [ ] **Gestion de la Bibliothèque** : Emprunts, retours, inventaire.
-- [ ] **Gestion du Matériel** : Stock de fournitures scolaires.
-- [ ] **Réinscriptions** : Processus automatisé pour les années suivantes.
+- [x] **Gestion de la Bibliothèque** : Emprunts, retours, inventaire.
+- [x] **Gestion du Matériel** : Stock de fournitures scolaires.
+- [x] **Réinscriptions** : Processus automatisé pour les années suivantes.
 
 ---
 *Dernière mise à jour : 18 Avril 2026*

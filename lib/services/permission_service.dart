@@ -20,6 +20,7 @@ class PermissionService {
     'view_library',
     'view_discipline',
     'manage_safe_mode',
+    'view_mock_exams',
   };
 
   static const defaultStaffPermissions = <String>{
@@ -31,6 +32,7 @@ class PermissionService {
     'view_finance_inventory',
     'view_library',
     'view_discipline',
+    'view_mock_exams',
   };
 
   static const defaultTeacherPermissions = <String>{
@@ -38,6 +40,7 @@ class PermissionService {
     'view_grades',
     'view_subjects',
     'view_finance_inventory',
+    'view_mock_exams',
   };
 
   static Set<String> decodePermissions(

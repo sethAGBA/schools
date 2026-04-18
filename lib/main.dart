@@ -29,6 +29,7 @@ import 'screens/library/library_page.dart';
 import 'screens/discipline/discipline_page.dart';
 import 'services/safe_mode_service.dart';
 import 'screens/statistiques/statistics_page.dart';
+import 'screens/grades/mock_exams_page.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 const List<String> kFontFallback = [
@@ -302,6 +303,7 @@ class _SchoolDashboardState extends State<SchoolDashboard>
       const LibraryPage(),
       const DisciplinePage(),
       const StatisticsPage(),
+      const MockExamsPage(),
     ];
     _pagePermissions = [
       'view_dashboard',
@@ -321,6 +323,7 @@ class _SchoolDashboardState extends State<SchoolDashboard>
       'view_library',
       'view_discipline',
       'view_statistics',
+      'view_mock_exams',
     ];
     _loadCurrentRole();
     _initLicenseListener();
