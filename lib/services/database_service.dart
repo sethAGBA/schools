@@ -31,7 +31,7 @@ import 'package:school_manager/models/library_loan.dart';
 import 'package:school_manager/models/teacher_assignment.dart';
 // Removed UI and prefs from data layer
 import 'package:path_provider/path_provider.dart';
-import 'dart:io' show Platform, File, Directory;
+import 'dart:io' show Platform, File, Directory, Process;
 import 'package:flutter/foundation.dart' show kIsWeb;
 // ANCIENNE MÉTHODE: utilise getDatabasesPath() de sqflite (pas besoin d'import supplémentaire)
 
@@ -201,6 +201,9 @@ class DatabaseService {
 
   Future<void> _cleanupEvaluationTemplatesDuplicates(Database db) async {
     try {
+      if (!await _tableExists(db, 'evaluation_templates')) {
+        return;
+      }
       // 1. Keep only the row with the largest ID for each unique combination
       //    (handles true duplicates with same term value)
       await db.execute('''
@@ -316,21 +319,32 @@ class DatabaseService {
     }
     // ============================================================================
 
+    if (!kIsWeb && Platform.isWindows) {
+      try {
+        final dbFile = File(path);
+        if (await dbFile.exists()) {
+          await Process.run('attrib', ['-R', path]);
+        }
+      } catch (e) {
+        debugPrint(
+          '[DatabaseService] Impossible de retirer l’attribut readonly: $e',
+        );
+      }
+    }
+
     debugPrint('[DatabaseService] Ouverture de la base à : $path');
     final db = await openDatabase(
       path,
       version: 12, // v12: student new columns (placeOfBirth)
       onOpen: (db) async {
-        // 1. S'assurer que les colonnes critiques existent dans les tables existantes (ex: après restauration)
+        // 1. S'assurer que les tables/colonnes/index critiques existent
+        await _ensureEvaluationTemplatesTable(db);
         await _ensureGradesTermColumn(db);
         await _ensureEvaluationTemplatesTermColumn(db);
 
-        // 2. Effectuer les nettoyages de doublons qui dépendent de ces colonnes
+        // 2. Effectuer les nettoyages de doublons
         await _cleanupGradesDuplicates(db);
         await _cleanupEvaluationTemplatesDuplicates(db);
-
-        // 3. S'assurer que les tables et index complets existent
-        await _ensureEvaluationTemplatesTable(db);
       },
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -1045,7 +1059,8 @@ class DatabaseService {
   }
 
   Future<void> _ensureEvaluationTemplatesTable(Database db) async {
-    await db.execute('''
+    try {
+      await db.execute('''
       CREATE TABLE IF NOT EXISTS evaluation_templates(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         className TEXT NOT NULL,
@@ -1063,24 +1078,64 @@ class DatabaseService {
         FOREIGN KEY (className, academicYear) REFERENCES classes(name, academicYear) ON UPDATE CASCADE ON DELETE RESTRICT
       )
     ''');
+    } catch (e) {
+      if (!_isReadonlyDbError(e)) rethrow;
+      debugPrint(
+        '[DatabaseService] Skipping evaluation_templates CREATE TABLE (readonly DB): $e',
+      );
+      return;
+    }
 
     // S'assurer que la colonne term existe avant de créer des index qui l'utilisent
     await _ensureEvaluationTemplatesTermColumn(db);
+    final cols = await db.rawQuery('PRAGMA table_info(evaluation_templates)');
+    final hasTerm = cols.any((c) => c['name'] == 'term');
 
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_eval_templates_lookup ON evaluation_templates(className, academicYear, term, subjectId)',
-    );
-    // Add unique index to prevent duplicates
-    await db.execute('''
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_templates_unique 
-      ON evaluation_templates(className, academicYear, term, subjectId, type, label)
-    ''');
-    await db.execute(
-      'CREATE INDEX IF NOT EXISTS idx_eval_tpl_order ON evaluation_templates(className, academicYear, term, subjectId, type, orderIndex)',
-    );
+    if (hasTerm) {
+      try {
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_eval_templates_lookup ON evaluation_templates(className, academicYear, term, subjectId)',
+        );
+        // Add unique index to prevent duplicates
+        await db.execute('''
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_templates_unique 
+          ON evaluation_templates(className, academicYear, term, subjectId, type, label)
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_eval_tpl_order ON evaluation_templates(className, academicYear, term, subjectId, type, orderIndex)',
+        );
+      } catch (e) {
+        if (!_isReadonlyDbError(e)) rethrow;
+        debugPrint(
+          '[DatabaseService] Skipping evaluation_templates indexes (readonly DB): $e',
+        );
+      }
+    } else {
+      // Legacy fallback when term cannot be added yet (e.g. readonly restore)
+      try {
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_eval_templates_lookup ON evaluation_templates(className, academicYear, subjectId)',
+        );
+        await db.execute('''
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_eval_templates_unique 
+          ON evaluation_templates(className, academicYear, subjectId, type, label)
+        ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_eval_tpl_order ON evaluation_templates(className, academicYear, subjectId, type, orderIndex)',
+        );
+      } catch (e) {
+        if (!_isReadonlyDbError(e)) rethrow;
+        debugPrint(
+          '[DatabaseService] Skipping fallback evaluation_templates indexes (readonly DB): $e',
+        );
+      }
+    }
   }
 
   Future<void> _ensureEvaluationTemplatesTermColumn(Database db) async {
+    if (!await _tableExists(db, 'evaluation_templates')) {
+      return;
+    }
     final cols = await db.rawQuery('PRAGMA table_info(evaluation_templates)');
     final hasTerm = cols.any((c) => c['name'] == 'term');
     if (!hasTerm) {
@@ -1094,6 +1149,13 @@ class DatabaseService {
         );
       }
     }
+  }
+
+  bool _isReadonlyDbError(Object error) {
+    final msg = error.toString().toLowerCase();
+    return msg.contains('readonly database') ||
+        msg.contains('attempt to write a readonly database') ||
+        msg.contains('code 8');
   }
 
   Future<void> _ensureGradesTermColumn(Database db) async {

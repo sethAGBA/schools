@@ -60,7 +60,7 @@ dependencies:
   icons_launcher: ^3.0.0
   flutter_colorpicker: ^1.1.0
   sqlite3: ^2.9.4
-  material_color_utilities: ^0.11.1
+  material_color_utilities: 0.13.0
   path_provider_android: ^2.2.22
   meta: ^1.16.0
   matcher: ^0.12.17

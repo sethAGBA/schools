@@ -1062,7 +1062,7 @@ class ReportCardCustomExportService {
                     ),
                     pw.TableRow(
                       children: [
-                        _miniCell('Moy. classe', font),
+                        _miniCell('Moy. de la classe', font),
                         _miniCell(moyenneClass, fontBold),
                         _miniCell('Rang', font),
                         _miniCell(

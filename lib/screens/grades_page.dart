@@ -4940,7 +4940,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       Padding(
                                         padding: EdgeInsets.all(4),
                                         child: Text(
-                                          _splitHeaderWords('Moyenne Generale'),
+                                          _splitHeaderWords('Moyenne Élève'),
                                           textAlign: TextAlign.center,
                                           style: headerTextStyle.copyWith(
                                             color: tableHeaderText,
@@ -4964,10 +4964,11 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       Padding(
                                         padding: EdgeInsets.all(4),
                                         child: Text(
-                                          'Moy. classe',
+                                          'Moyenne\nGen\nClasse',
+                                          textAlign: TextAlign.center,
                                           style: headerTextStyle.copyWith(
                                             color: tableHeaderText,
-                                            fontSize: 12,
+                                            fontSize: 11,
                                           ),
                                         ),
                                       ),
@@ -5219,7 +5220,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                                       .isActionAllowed() &&
                                                   !_isPeriodLocked(),
                                               decoration: InputDecoration(
-                                                hintText: 'Moy. classe',
+                                                hintText: 'Moy. de la classe',
                                                 hintStyle: TextStyle(
                                                   color: secondaryColor,
                                                   fontSize: 10,
