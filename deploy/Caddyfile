@@ -1,0 +1,28 @@
+{
+  email admin@example.com
+}
+
+{$PUBLIC_API_HOST} {
+  encode gzip
+
+  @health path /health* /healthz* /ready* /live*
+  handle @health {
+    reverse_proxy api:{$API_PORT}
+  }
+
+  reverse_proxy api:{$API_PORT}
+
+  header {
+    # HSTS (active en prod si domaine stable)
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+  }
+
+  log {
+    output stdout
+    format console
+  }
+}
+

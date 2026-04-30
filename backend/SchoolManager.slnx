@@ -1,0 +1,34 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SchoolManager.Api/SchoolManager.Api.csproj" />
+    <Project Path="src/SchoolManager.BuildingBlocks/SchoolManager.BuildingBlocks.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Academics/">
+    <Project Path="src/Modules/Academics/SchoolManager.Modules.Academics/SchoolManager.Modules.Academics.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Audit/">
+    <Project Path="src/Modules/Audit/SchoolManager.Modules.Audit/SchoolManager.Modules.Audit.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Authorization/">
+    <Project Path="src/Modules/Authorization/SchoolManager.Modules.Authorization/SchoolManager.Modules.Authorization.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Documents/">
+    <Project Path="src/Modules/Documents/SchoolManager.Modules.Documents/SchoolManager.Modules.Documents.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Finance/">
+    <Project Path="src/Modules/Finance/SchoolManager.Modules.Finance/SchoolManager.Modules.Finance.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Identity/">
+    <Project Path="src/Modules/Identity/SchoolManager.Modules.Identity/SchoolManager.Modules.Identity.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Reporting/">
+    <Project Path="src/Modules/Reporting/SchoolManager.Modules.Reporting/SchoolManager.Modules.Reporting.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Students/">
+    <Project Path="src/Modules/Students/SchoolManager.Modules.Students/SchoolManager.Modules.Students.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Tenancy/">
+    <Project Path="src/Modules/Tenancy/SchoolManager.Modules.Tenancy/SchoolManager.Modules.Tenancy.csproj" />
+  </Folder>
+</Solution>

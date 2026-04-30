@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\Identity\SchoolManager.Modules.Identity\SchoolManager.Modules.Identity.csproj" />
+    <ProjectReference Include="..\Modules\Tenancy\SchoolManager.Modules.Tenancy\SchoolManager.Modules.Tenancy.csproj" />
+    <ProjectReference Include="..\Modules\Authorization\SchoolManager.Modules.Authorization\SchoolManager.Modules.Authorization.csproj" />
+    <ProjectReference Include="..\Modules\Students\SchoolManager.Modules.Students\SchoolManager.Modules.Students.csproj" />
+    <ProjectReference Include="..\Modules\Academics\SchoolManager.Modules.Academics\SchoolManager.Modules.Academics.csproj" />
+    <ProjectReference Include="..\Modules\Finance\SchoolManager.Modules.Finance\SchoolManager.Modules.Finance.csproj" />
+    <ProjectReference Include="..\Modules\Reporting\SchoolManager.Modules.Reporting\SchoolManager.Modules.Reporting.csproj" />
+    <ProjectReference Include="..\Modules\Audit\SchoolManager.Modules.Audit\SchoolManager.Modules.Audit.csproj" />
+    <ProjectReference Include="..\Modules\Documents\SchoolManager.Modules.Documents\SchoolManager.Modules.Documents.csproj" />
+    <ProjectReference Include="..\SchoolManager.BuildingBlocks\SchoolManager.BuildingBlocks.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+  </ItemGroup>
+
+</Project>

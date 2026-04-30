@@ -242,6 +242,43 @@ Approche recommandee: **modular monolith** au depart, puis extraction possible e
 - Journalisation centralisee + alerting securite.
 - Rotation des secrets et certificats planifiee.
 
+### Plan de deploiement pro (VPS + Docker + auto-update Windows)
+Pile recommandee:
+- **VPS Linux (Ubuntu 24.04)**: Docker + Compose
+- **Reverse proxy**: Caddy (TLS auto via Let's Encrypt)
+- **API**: conteneur .NET (Kestrel) derriere Caddy
+- **PostgreSQL**: service managé (recommandé) avec allowlist IP (VPS uniquement)
+- **Stockage documents**: objet (S3/B2/Wasabi) + policies par tenant
+- **Auto-update Windows**: MSIX + App Installer (canal stable)
+
+Checklist de mise en ligne:
+- **DNS/Domaines**
+  - `api.<domaine>` -> VPS (A/AAAA)
+  - `updates.<domaine>` -> hebergement updates (VPS ou storage statique)
+- **Reseau/Firewall VPS**
+  - Ouvrir uniquement 80/443 (et SSH restreint a ton IP)
+  - DB jamais exposee publiquement
+- **Docker (prod)**
+  - `caddy` + `api` via `docker-compose`
+  - Variables d'environnement pour secrets (pas dans git)
+  - Logs structurés + rotation
+- **Base PostgreSQL (prod)**
+  - Backups automatiques chiffrés
+  - Test de restauration planifie
+  - Migrations versionnees (run a chaque release)
+- **CI/CD**
+  - Build image API -> push registry -> deploy compose sur VPS
+  - Strategie rollback (tag N-1) + health checks
+  - Environnements: staging + prod
+- **Observabilite**
+  - Monitoring uptime + alerting (5xx, latence)
+  - Centralisation logs (API + proxy) + audit trail
+- **Auto-update Windows (MSIX)**
+  - Generer package MSIX signe
+  - Publier `.msix` + `.appinstaller` sur `updates.<domaine>`
+  - Configurer verif updates periodique (App Installer)
+  - Garder un canal staging pour tests (facultatif mais recommandé)
+
 ## Risques principaux
 - Mauvaise propagation du contexte tenant dans l'API.
 - Permissions trop larges au demarrage.
