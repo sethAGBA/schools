@@ -13,7 +13,6 @@ import 'package:school_manager/constants/strings.dart';
 import 'package:school_manager/models/class.dart';
 import 'package:school_manager/models/payment.dart';
 import 'package:school_manager/models/student.dart';
-import 'package:school_manager/models/grade.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:school_manager/screens/students/widgets/form_field.dart';
@@ -5472,19 +5471,7 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
         );
       }
 
-      // Fetch grades for the subject and term
-      final allGrades = await _dbService.getAllGradesForPeriod(
-        className: className,
-        academicYear: year,
-        term: selectedTerm,
-      );
-      final subjectGrades = allGrades.where((g) => g.subject == subjectName).toList();
-
-      // Group grades by student and type
-      final Map<String, List<Grade>> gradesByStudent = {};
-      for (final grade in subjectGrades) {
-        gradesByStudent.putIfAbsent(grade.studentId, () => []).add(grade);
-      }
+      // Modèle vierge: pas de chargement de notes existantes.
 
       pdf.addPage(
         pw.MultiPage(
@@ -5554,91 +5541,50 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
             ],
           ),
           build: (context) {
-            // Entêtes: N°, Matricule, Nom et Prénom(s), Sexe, Statut, Notes de classe, Moyenne de classe, Note composition, Observations
+            // Ligne d'entête interne laissée vide: le libellé est porté
+            // par la ligne d'entête groupée au-dessus du tableau.
             final headers = <String>[
-              'N°',
-              'Matricule',
-              'Nom et Prénom(s)',
-              'Sexe',
-              'Statut',
-              'Notes de classe',
-              'Moyenne Classe',
-              'Note Composition',
-              'Observations',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
+              '',
             ];
             final rows = <List<String>>[];
 
             for (int i = 0; i < studentsSorted.length; i++) {
               final s = studentsSorted[i];
-              final studentGrades = gradesByStudent[s.id] ?? [];
-
-              // Separate grades by type
-              final classworkGrades = studentGrades.where((g) => (g.type?.toLowerCase().contains('devoir') ?? false) || (g.type?.toLowerCase().contains('classe') ?? false)).toList();
-              final examGrades = studentGrades.where((g) => (g.type?.toLowerCase().contains('composition') ?? false) || (g.type?.toLowerCase().contains('exam') ?? false)).toList();
-
-              // Calculate averages
-              double classworkAvg = 0.0;
-              if (classworkGrades.isNotEmpty) {
-                double total = 0.0;
-                double totalCoeff = 0.0;
-                for (final g in classworkGrades) {
-                  if (g.maxValue > 0) {
-                    total += ((g.value ?? 0) / g.maxValue) * 20 * g.coefficient;
-                    totalCoeff += g.coefficient;
-                  }
-                }
-                classworkAvg = totalCoeff > 0 ? total / totalCoeff : 0.0;
-              }
-
-              double examAvg = 0.0;
-              if (examGrades.isNotEmpty) {
-                double total = 0.0;
-                double totalCoeff = 0.0;
-                for (final g in examGrades) {
-                  if (g.maxValue > 0) {
-                    total += ((g.value ?? 0) / g.maxValue) * 20 * g.coefficient;
-                    totalCoeff += g.coefficient;
-                  }
-                }
-                examAvg = totalCoeff > 0 ? total / totalCoeff : 0.0;
-              }
-
-              // Calculate overall average for the subject
-              double overallAvg = 0.0;
-              if (studentGrades.isNotEmpty) {
-                double total = 0.0;
-                double totalCoeff = 0.0;
-                for (final g in studentGrades) {
-                  if (g.maxValue > 0) {
-                    total += (g.value / g.maxValue) * 20 * g.coefficient;
-                    totalCoeff += g.coefficient;
-                  }
-                }
-                overallAvg = totalCoeff > 0 ? total / totalCoeff : 0.0;
-              }
-
               final row = <String>[
                 (i + 1).toString(),
                 (s.matricule ?? ''),
                 PdfService.sanitizeForPdf('${s.lastName} ${s.firstName}'.trim()),
                 s.gender,
                 s.status,
-                classworkGrades.isNotEmpty ? classworkGrades.take(3).map((g) => (g.value ?? 0).toStringAsFixed(1)).join('\n') : '', // Notes de classe
-                overallAvg > 0 ? overallAvg.toStringAsFixed(2) : '', // Moyenne Classe
-                examAvg > 0 ? examAvg.toStringAsFixed(2) : '', // Note Composition
+                '', // Notes de classe 1 (saisie manuelle)
+                '', // Notes de classe 2 (saisie manuelle)
+                '', // Notes de classe 3 (saisie manuelle)
+                '', // Moyenne Classe (saisie manuelle)
+                '', // Note Composition (saisie manuelle)
                 '', // Observations
               ];
               rows.add(row);
             }
 
-            // Définir des largeurs flexibles
             final List<int> columnFlex = [
               6,  // N°
               9,  // Matricule
               28, // Nom et Prénom(s)
               8,  // Sexe
               10, // Statut
-              20, // Notes de classe
+              9,  // Note classe 1
+              9,  // Note classe 2
+              9,  // Note classe 3
               12, // Moyenne Classe
               12, // Note Composition
               16, // Observations
@@ -5651,7 +5597,88 @@ class _ClassDetailsPageState extends State<ClassDetailsPage>
             const headerBg = PdfColors.blue100;
             const headerBorder = PdfColors.blue200;
 
+            pw.Widget topHeaderCell(
+              String text, {
+              bool isFirst = false,
+              bool isLast = false,
+            }) {
+              return pw.Container(
+                height: 22,
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 3,
+                ),
+                decoration: pw.BoxDecoration(
+                  color: headerBg,
+                  border: pw.Border.all(color: headerBorder, width: 0.8),
+                  borderRadius: pw.BorderRadius.only(
+                    topLeft: isFirst
+                        ? const pw.Radius.circular(6)
+                        : pw.Radius.zero,
+                    topRight: isLast
+                        ? const pw.Radius.circular(6)
+                        : pw.Radius.zero,
+                  ),
+                ),
+                alignment: pw.Alignment.center,
+                child: pw.Text(
+                  text,
+                  textAlign: pw.TextAlign.center,
+                  maxLines: 2,
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontWeight: pw.FontWeight.bold,
+                    font: fonts.bold,
+                  ),
+                ),
+              );
+            }
+
+            final int notesGroupFlex =
+                columnFlex[5] + columnFlex[6] + columnFlex[7];
+
             return [
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    flex: columnFlex[0],
+                    child: topHeaderCell('N°', isFirst: true),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[1],
+                    child: topHeaderCell('Matricule'),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[2],
+                    child: topHeaderCell('Nom et Prénom(s)'),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[3],
+                    child: topHeaderCell('Sexe'),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[4],
+                    child: topHeaderCell('Statut'),
+                  ),
+                  pw.Expanded(
+                    flex: notesGroupFlex,
+                    child: topHeaderCell('Notes de classe'),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[8],
+                    child: topHeaderCell('Moyenne Classe'),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[9],
+                    child: topHeaderCell('Note Composition'),
+                  ),
+                  pw.Expanded(
+                    flex: columnFlex[10],
+                    child: topHeaderCell('Observations', isLast: true),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 2),
               pw.Table(
                 border: pw.TableBorder.all(color: PdfColors.blue100),
                 columnWidths: columnWidths,
