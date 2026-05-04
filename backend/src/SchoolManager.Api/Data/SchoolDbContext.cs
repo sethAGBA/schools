@@ -3,6 +3,7 @@ using SchoolManager.Api.Multitenancy;
 using SchoolManager.Modules.Audit;
 using SchoolManager.Modules.Identity.Domain;
 using SchoolManager.Modules.Students;
+using SchoolManager.Modules.Academics;
 using SchoolManager.Modules.Tenancy;
 
 namespace SchoolManager.Api.Data;
@@ -18,6 +19,9 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
     public DbSet<StudentRecord> Students => Set<StudentRecord>();
+    public DbSet<ClassRoom> Classes => Set<ClassRoom>();
+    public DbSet<Subject> Subjects => Set<Subject>();
+    public DbSet<Grade> Grades => Set<Grade>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -138,6 +142,64 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
             entity.HasIndex(x => new { x.TenantId, x.ClassName, x.AcademicYear });
             entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
         });
+
+        modelBuilder.Entity<ClassRoom>(entity =>
+        {
+            entity.ToTable("classes");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(150).IsRequired();
+            entity.Property(x => x.AcademicYear).HasColumnName("academic_year").HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Level).HasColumnName("level").HasMaxLength(100);
+            entity.Property(x => x.Capacity).HasColumnName("capacity").IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+
+            entity.HasIndex(x => new { x.TenantId, x.Name, x.AcademicYear });
+            entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<Subject>(entity =>
+        {
+            entity.ToTable("subjects");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Coefficient).HasColumnName("coefficient").IsRequired();
+            entity.Property(x => x.ClassRoomId).HasColumnName("class_room_id").IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+
+            entity.HasIndex(x => new { x.TenantId, x.ClassRoomId });
+            entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
+        });
+
+        modelBuilder.Entity<Grade>(entity =>
+        {
+            entity.ToTable("grades");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.StudentId).HasColumnName("student_id").IsRequired();
+            entity.Property(x => x.SubjectId).HasColumnName("subject_id").IsRequired();
+            entity.Property(x => x.Period).HasColumnName("period").HasMaxLength(60).IsRequired();
+            entity.Property(x => x.DevoirNote).HasColumnName("devoir_note");
+            entity.Property(x => x.CompositionNote).HasColumnName("composition_note");
+            entity.Property(x => x.Average).HasColumnName("average");
+            entity.Property(x => x.TeacherComment).HasColumnName("teacher_comment").HasMaxLength(1000);
+            entity.Property(x => x.ClassAverage).HasColumnName("class_average");
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+
+            entity.HasIndex(x => new { x.TenantId, x.StudentId, x.Period });
+            entity.HasIndex(x => new { x.TenantId, x.SubjectId, x.Period });
+            entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
+        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -171,6 +233,45 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
         }
 
         foreach (var entry in ChangeTracker.Entries<StudentRecord>())
+        {
+            if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<ClassRoom>())
+        {
+            if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Subject>())
+        {
+            if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Grade>())
         {
             if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
             {
