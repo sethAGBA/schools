@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SchoolManager.Api.Multitenancy;
 using SchoolManager.Modules.Audit;
 using SchoolManager.Modules.Identity.Domain;
+using SchoolManager.Modules.Students;
 using SchoolManager.Modules.Tenancy;
 
 namespace SchoolManager.Api.Data;
@@ -16,6 +17,7 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<LoginAttempt> LoginAttempts => Set<LoginAttempt>();
+    public DbSet<StudentRecord> Students => Set<StudentRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -109,6 +111,33 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
             entity.HasIndex(x => new { x.TenantId, x.Email, x.IpAddress, x.AttemptedAtUtc });
             entity.HasIndex(x => x.AttemptedAtUtc);
         });
+
+        modelBuilder.Entity<StudentRecord>(entity =>
+        {
+            entity.ToTable("students");
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FirstName).HasColumnName("first_name").HasMaxLength(150).IsRequired();
+            entity.Property(x => x.LastName).HasColumnName("last_name").HasMaxLength(150).IsRequired();
+            entity.Property(x => x.DateOfBirth).HasColumnName("date_of_birth").IsRequired();
+            entity.Property(x => x.Gender).HasColumnName("gender").HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ClassName).HasColumnName("class_name").HasMaxLength(120).IsRequired();
+            entity.Property(x => x.AcademicYear).HasColumnName("academic_year").HasMaxLength(40).IsRequired();
+            entity.Property(x => x.GuardianName).HasColumnName("guardian_name").HasMaxLength(200).IsRequired();
+            entity.Property(x => x.GuardianContact).HasColumnName("guardian_contact").HasMaxLength(60).IsRequired();
+            entity.Property(x => x.ContactNumber).HasColumnName("contact_number").HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Email).HasColumnName("email").HasMaxLength(320);
+            entity.Property(x => x.Address).HasColumnName("address").HasMaxLength(500);
+            entity.Property(x => x.IsActive).HasColumnName("is_active").IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+
+            entity.HasIndex(x => new { x.TenantId, x.LastName, x.FirstName });
+            entity.HasIndex(x => new { x.TenantId, x.ClassName, x.AcademicYear });
+            entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
+        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -138,6 +167,19 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
             if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
             {
                 entry.Entity.TenantId = tenantId;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<StudentRecord>())
+        {
+            if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
             }
         }
     }

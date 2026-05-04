@@ -9,7 +9,8 @@ Mettre en place une architecture robuste pour `school_manager` avec:
 ## Architecture cible
 - Client: Flutter desktop (Windows)
 - API: Backend dedie (NestJS ou .NET)
-- Base de donnees: PostgreSQL
+- Base de donnees centrale: PostgreSQL
+- Base locale desktop: SQLite (cache + mode offline + file de synchronisation)
 - Auth: JWT court + refresh token rotatif + MFA
 - Isolation multitenant: `tenant_id` + Row Level Security (RLS)
 
@@ -149,11 +150,15 @@ Approche recommandee: **modular monolith** au depart, puis extraction possible e
 - Ajouter couche `ApiClient` + gestion token.
 - Stockage local securise des secrets/session.
 - Ecran de selection tenant si utilisateur multi-tenant.
-- Gestion hors-ligne minimale (cache local non sensible).
+- Activer mode hybride: API comme source de verite + SQLite local comme cache/offline.
+- Ajouter une table locale `pending_sync` pour operations hors-ligne (insert/update/delete).
+- Definir l'ordre de resynchronisation (FIFO), retries et idempotence.
+- Limiter les donnees sensibles conservees en local (chiffrement local si necessaire).
 
 **Livrables**
 - Client desktop branche a l'API.
 - Flux auth complet en desktop.
+- Cache SQLite + file de synchro operationnels.
 
 ## Phase 8 - Migration SQLite -> PostgreSQL (Semaines 9-10)
 - Inventorier tables SQLite existantes.
@@ -161,10 +166,13 @@ Approche recommandee: **modular monolith** au depart, puis extraction possible e
 - Script ETL de migration + validation integrite.
 - Migration pilote sur un tenant de test.
 - Plan rollback + plan de coupure.
+- Basculer SQLite vers role **cache/sync** (et non source metier principale).
+- Definir strategie de resolution de conflits (`updated_at`/version, regle serveur prioritaire par defaut).
 
 **Livrables**
 - Scripts migration versionnes.
 - Rapport de reconciliation.
+- Politique de synchro et conflits documentee.
 
 ## Phase 9 - Tests securite et validation finale (Semaines 10-11)
 - Tests unitaires/integration sur auth, RBAC, RLS.
@@ -195,6 +203,7 @@ Approche recommandee: **modular monolith** au depart, puis extraction possible e
 - MFA pour roles privilegies.
 - Audit complet sur operations sensibles.
 - Backups chiffres + restauration testee.
+- SQLite autorisee uniquement pour cache local et operations offline a resynchroniser.
 
 ## KPI de succes
 - 0 fuite inter-tenant en tests de securite.

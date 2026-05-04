@@ -9,7 +9,6 @@ namespace SchoolManager.Api.Data;
 public sealed class DbInitializer(
     IServiceScopeFactory scopeFactory,
     IOptions<SeedOptions> seedOptions,
-    IPasswordHasher passwordHasher,
     ILogger<DbInitializer> logger) : IHostedService
 {
     private readonly SeedOptions _seedOptions = seedOptions.Value;
@@ -17,7 +16,9 @@ public sealed class DbInitializer(
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<SchoolDbContext>();
+        var serviceProvider = scope.ServiceProvider;
+        var dbContext = serviceProvider.GetRequiredService<SchoolDbContext>();
+        var passwordHasher = serviceProvider.GetRequiredService<IPasswordHasher>();
 
         await dbContext.Database.MigrateAsync(cancellationToken);
         await EnsureTenantAsync(dbContext, _seedOptions.PlatformTenantId, "Platform", cancellationToken);
@@ -25,6 +26,7 @@ public sealed class DbInitializer(
 
         await EnsureUserAsync(
             dbContext,
+            passwordHasher,
             _seedOptions.PlatformTenantId,
             _seedOptions.SuperAdminEmail,
             _seedOptions.SuperAdminPassword,
@@ -33,6 +35,7 @@ public sealed class DbInitializer(
 
         await EnsureUserAsync(
             dbContext,
+            passwordHasher,
             _seedOptions.SchoolTenantId,
             _seedOptions.SchoolAdminEmail,
             _seedOptions.SchoolAdminPassword,
@@ -65,6 +68,7 @@ public sealed class DbInitializer(
 
     private async Task EnsureUserAsync(
         SchoolDbContext dbContext,
+        IPasswordHasher passwordHasher,
         string tenantId,
         string emailInput,
         string password,

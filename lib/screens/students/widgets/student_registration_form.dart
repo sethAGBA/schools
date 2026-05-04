@@ -10,6 +10,7 @@ import 'package:school_manager/models/class.dart';
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/models/student_document.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/students_sync_service.dart';
 import 'package:uuid/uuid.dart';
 // shared_preferences not used in this file
 import 'package:school_manager/utils/academic_year.dart';
@@ -21,12 +22,14 @@ import 'form_field.dart';
 
 class StudentRegistrationForm extends StatefulWidget {
   final VoidCallback onSubmit;
+  final ValueChanged<StudentsUpsertResult>? onSyncResult;
   final Student? student;
   final String? className;
   final bool classFieldReadOnly;
 
   const StudentRegistrationForm({
     required this.onSubmit,
+    this.onSyncResult,
     this.student,
     this.className,
     this.classFieldReadOnly = false,
@@ -470,13 +473,11 @@ class _StudentRegistrationFormState extends State<StudentRegistrationForm> {
         documents: _documents,
       );
       try {
-        if (widget.student != null) {
-          // update
-          await _dbService.updateStudent(widget.student!.id, student);
-        } else {
-          // insert
-          await _dbService.insertStudent(student);
-        }
+        final result = await StudentsSyncService.instance.upsertStudent(
+          student,
+          isUpdate: widget.student != null,
+        );
+        widget.onSyncResult?.call(result);
         // Fermer le dialog et laisser le parent afficher un Snackbar
         widget.onSubmit();
         if (Navigator.of(context).canPop()) {

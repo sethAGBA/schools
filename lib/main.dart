@@ -12,6 +12,8 @@ import 'screens/payments_page.dart';
 import 'screens/settings_page.dart';
 import 'widgets/sidebar.dart';
 import 'services/auth_service.dart';
+import 'services/api/api_client.dart';
+import 'services/api/token_storage_service.dart';
 import 'services/database_service.dart';
 import 'services/permission_service.dart';
 import 'screens/auth/login_page.dart';
@@ -108,6 +110,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadInitialTheme();
     _ensureAdminExists();
+    _setupApiUnauthorizedHandler();
     // Always start on Login: do not auto-load persisted session here
   }
 
@@ -139,6 +142,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       MaterialPageRoute(builder: (_) => LoginPage(onSuccess: _onLoginSuccess)),
       (route) => false,
     );
+  }
+
+  void _setupApiUnauthorizedHandler() {
+    ApiClient.instance.onUnauthorized = () async {
+      await TokenStorageService.instance.clearSession();
+      await AuthService.instance.logout();
+      showRootSnackBar(
+        const SnackBar(
+          content: Text('Session API expirée. Veuillez vous reconnecter.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      appNavigatorKey.currentState?.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => LoginPage(onSuccess: _onLoginSuccess)),
+        (route) => false,
+      );
+    };
   }
 
   @override

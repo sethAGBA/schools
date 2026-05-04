@@ -15,8 +15,11 @@ import 'package:school_manager/screens/students/widgets/student_registration_for
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/screens/students/student_profile_page.dart';
 import 'package:school_manager/services/pdf_service.dart';
+import 'package:school_manager/services/api/token_storage_service.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/api/remote_students_service.dart';
 import 'package:school_manager/services/student_id_card_service.dart';
+import 'package:school_manager/services/students_sync_service.dart';
 import 'package:school_manager/utils/academic_year.dart';
 import 'package:school_manager/screens/students/re_enrollment_batch_dialog.dart';
 import 'package:csv/csv.dart';
@@ -39,6 +42,12 @@ class _StudentsPageState extends State<StudentsPage> {
   List<Map<String, dynamic>> _tableData = [];
   List<Student> _allStudents = []; // Store all students for search
   List<Class> _allClasses = [];
+
+  String _dataSourceLabel = 'Local (SQLite)';
+  String? _remoteLoadWarning;
+  bool _syncing = false;
+  bool _isFilterLoading = false;
+  int _pendingSyncCount = 0;
 
   // Filtres sélectionnés
   String? _selectedClassFilter;
@@ -75,6 +84,51 @@ class _StudentsPageState extends State<StudentsPage> {
   String _visibilityFilter = 'active'; // 'active' | 'deleted' | 'all'
   bool _selectionMode = false;
   final Set<String> _selectedStudentIds = <String>{};
+  StudentsUpsertResult? _lastUpsertResult;
+
+  String _buildRemoteWarning(Object error) {
+    if (error is RemoteApiException) {
+      if (error.statusCode == 503) {
+        return 'Mode local: serveur indisponible ou connexion lente.';
+      }
+      if (error.statusCode == 401) {
+        return 'Mode local: session API expirée. Reconnecte-toi.';
+      }
+      if (error.statusCode == 403) {
+        return 'Mode local: accès API refusé pour ce compte.';
+      }
+      return 'Mode local: erreur API (${error.statusCode}) - ${error.message}';
+    }
+    return 'Mode local: API indisponible (${error.toString()})';
+  }
+
+  SnackBar _buildUpsertSnackBar({required bool isUpdate}) {
+    final result = _lastUpsertResult;
+    final bool offline = result?.usedOfflineFallback == true;
+    final String text = isUpdate
+        ? (offline
+              ? 'Élève modifié en local. Synchronisation en attente.'
+              : 'Élève modifié et synchronisé avec le serveur.')
+        : (offline
+              ? 'Élève ajouté en local. Synchronisation en attente.'
+              : 'Élève ajouté et synchronisé avec le serveur.');
+    return SnackBar(
+      content: Row(
+        children: [
+          Icon(
+            offline ? Icons.cloud_off : Icons.check_circle,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 8),
+          Text(text),
+        ],
+      ),
+      backgroundColor: offline ? Colors.orange : Colors.green,
+      duration: const Duration(seconds: 3),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    );
+  }
 
   @override
   void initState() {
@@ -105,36 +159,79 @@ class _StudentsPageState extends State<StudentsPage> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    final classDist = await _dbService.getClassDistribution();
-    final yearDist = await _dbService.getAcademicYearDistribution();
-    final bool includeDeleted = _visibilityFilter == 'all';
-    final bool onlyDeleted = _visibilityFilter == 'deleted';
-    final students = await _dbService.getStudents(
-      includeDeleted: includeDeleted || onlyDeleted,
-      onlyDeleted: onlyDeleted,
-    );
-    final classes = await _dbService.getClasses();
+  Future<void> _loadData({bool indicateFilterLoading = false}) async {
+    if (indicateFilterLoading && mounted) {
+      setState(() => _isFilterLoading = true);
+    }
+    try {
+      final bool includeDeleted = _visibilityFilter == 'all';
+      final bool onlyDeleted = _visibilityFilter == 'deleted';
+      final classes = await _dbService.getClasses();
+      final pendingCount = await _dbService.getPendingSyncCount(entity: 'student');
+      final summaryStudents = await _dbService.getStudents(
+        includeDeleted: includeDeleted || onlyDeleted,
+        onlyDeleted: onlyDeleted,
+      );
 
-    // Store all students for search functionality
-    setState(() {
-      _allStudents = students;
-      _allClasses = classes;
-      if (_visibilityFilter != 'active') {
-        // When viewing deleted/all, student selection mode is more useful; keep selection.
+      List<Student> students;
+      final classDist = await _dbService.getClassDistribution();
+      final yearDist = await _dbService.getAcademicYearDistribution();
+
+      // Try remote first (API) only when an API session token exists.
+      final accessToken = await TokenStorageService.instance.getAccessToken();
+      final hasApiSession = accessToken != null && accessToken.trim().isNotEmpty;
+
+      if (hasApiSession) {
+        try {
+          final selectedClass = _classFromKey(_selectedClassFilter, classes);
+        final effectiveYear = selectedClass?.academicYear ?? _selectedYearFilter;
+          final paged = await RemoteStudentsService.instance.listStudents(
+            className: selectedClass?.name,
+          academicYear: effectiveYear,
+            search: _searchQuery.trim().isEmpty ? null : _searchQuery.trim(),
+            page: 1,
+            pageSize: 200,
+          );
+          students = paged.items;
+          _dataSourceLabel = 'Serveur (API)';
+          _remoteLoadWarning = null;
+        } catch (e) {
+          students = await _dbService.getStudents(
+            includeDeleted: includeDeleted || onlyDeleted,
+            onlyDeleted: onlyDeleted,
+          );
+          _dataSourceLabel = 'Local (SQLite)';
+          _remoteLoadWarning = _buildRemoteWarning(e);
+        }
       } else {
-        // Prune selection for students no longer visible.
-        _selectedStudentIds.removeWhere(
-          (id) => !students.any((s) => s.id == id),
+        students = await _dbService.getStudents(
+          includeDeleted: includeDeleted || onlyDeleted,
+          onlyDeleted: onlyDeleted,
         );
+        _dataSourceLabel = 'Local (SQLite)';
+        _remoteLoadWarning =
+            'Session API absente. Connecte-toi avec un compte backend (email + tenant).';
       }
-    });
 
-    final tableData = classes.map((cls) {
+      // Store all students for search functionality
+      setState(() {
+        _allStudents = students;
+        _allClasses = classes;
+        if (_visibilityFilter != 'active') {
+          // When viewing deleted/all, student selection mode is more useful; keep selection.
+        } else {
+          // Prune selection for students no longer visible.
+          _selectedStudentIds.removeWhere(
+            (id) => !students.any((s) => s.id == id),
+          );
+        }
+      });
+
+      final tableData = classes.map((cls) {
       final key = _classKey(cls);
       final label = _classLabel(cls);
       // Compter uniquement les élèves de l'année académique de la classe
-      final filteredStudents = students
+      final filteredStudents = summaryStudents
           .where(
             (s) =>
                 s.className == cls.name && s.academicYear == cls.academicYear,
@@ -154,21 +251,27 @@ class _StudentsPageState extends State<StudentsPage> {
         'year': cls.academicYear,
         'level': level,
       };
-    }).toList();
+      }).toList();
 
-    setState(() {
-      _classDistribution = classDist;
-      _academicYearDistribution = yearDist;
-      _tableData = tableData;
-      if (_selectedClassFilter != null) {
-        final exists = tableData.any(
-          (row) => row['classKey'] == _selectedClassFilter,
-        );
-        if (!exists) {
-          _selectedClassFilter = null;
+      setState(() {
+        _classDistribution = classDist;
+        _academicYearDistribution = yearDist;
+        _tableData = tableData;
+        _pendingSyncCount = pendingCount;
+        if (_selectedClassFilter != null) {
+          final exists = tableData.any(
+            (row) => row['classKey'] == _selectedClassFilter,
+          );
+          if (!exists) {
+            _selectedClassFilter = null;
+          }
         }
+      });
+    } finally {
+      if (indicateFilterLoading && mounted) {
+        setState(() => _isFilterLoading = false);
       }
-    });
+    }
   }
 
   List<Map<String, dynamic>> get _filteredTableData {
@@ -294,7 +397,8 @@ class _StudentsPageState extends State<StudentsPage> {
     return _allStudents.where((s) {
       if (_visibilityFilter == 'active' && s.isDeleted) return false;
       if (_visibilityFilter == 'deleted' && !s.isDeleted) return false;
-      if (selectedYear != null && selectedYear.isNotEmpty) {
+      // If a class is selected, it already encodes the academic year.
+      if (classAndYear == null && selectedYear != null && selectedYear.isNotEmpty) {
         if (s.academicYear != selectedYear) return false;
       }
       if (selectedGender != null && selectedGender.isNotEmpty) {
@@ -510,16 +614,55 @@ class _StudentsPageState extends State<StudentsPage> {
             }).toList();
 
             int inserted = 0;
+            int synced = 0;
+            int pending = 0;
             for (final r in toInsert) {
               final st = r.student;
               if (st == null) continue;
-              await _dbService.insertStudent(st);
+              final result = await StudentsSyncService.instance.upsertStudent(
+                st,
+                isUpdate: false,
+              );
               inserted += 1;
+              if (result.usedOfflineFallback) {
+                pending += 1;
+              } else {
+                synced += 1;
+              }
             }
             await _loadData();
             if (mounted) {
+              final detail = synced > 0 && pending > 0
+                  ? '$synced synchronisé(s), $pending en attente de sync.'
+                  : synced > 0
+                      ? '$synced synchronisé(s) avec le serveur.'
+                      : '$pending mis en attente de synchronisation (mode local).';
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Import terminé: $inserted élève(s) importé(s).')),
+                SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(
+                        pending > 0 && synced == 0
+                            ? Icons.cloud_off
+                            : Icons.check_circle,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Import terminé: $inserted élève(s). $detail',
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor:
+                      pending > 0 && synced == 0 ? Colors.orange : Colors.green,
+                  duration: const Duration(seconds: 4),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               );
             }
           },
@@ -784,15 +927,66 @@ class _StudentsPageState extends State<StudentsPage> {
     );
     if (ok != true) return;
     debugPrint('[StudentsPage] bulk delete confirmed');
-    await _dbService.softDeleteStudents(
-      studentIds: selected.map((s) => s.id).toList(),
-    );
+    var offlineCount = 0;
+    for (final student in selected) {
+      final result = await StudentsSyncService.instance.deleteStudent(student);
+      if (result.usedOfflineFallback) {
+        offlineCount += 1;
+      }
+    }
     await _loadData();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${selected.length} élève(s) supprimé(s).')),
+      SnackBar(
+        content: Text(
+          offlineCount > 0
+              ? '${selected.length} élève(s) supprimé(s), dont $offlineCount en attente de synchronisation.'
+              : '${selected.length} élève(s) supprimé(s) et synchronisé(s).',
+        ),
+      ),
     );
     _setSelectionMode(false);
+  }
+
+  Future<void> _deleteStudent(Student student) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Supprimer cet élève ?'),
+        content: Text(
+          'Cette action place ${student.name} dans la corbeille (suppression logique).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final result = await StudentsSyncService.instance.deleteStudent(student);
+    await _loadData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.usedOfflineFallback
+              ? 'Élève supprimé en local. Synchronisation en attente.'
+              : 'Élève supprimé et synchronisé avec le serveur.',
+        ),
+        backgroundColor: result.usedOfflineFallback ? Colors.orange : Colors.green,
+      ),
+    );
   }
 
   Future<void> _bulkRestoreSelectedStudents() async {
@@ -1292,28 +1486,145 @@ class _StudentsPageState extends State<StudentsPage> {
                 ],
               ),
               // Notification icon back in place
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.shadowDark.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Synchroniser',
+                    onPressed: _syncing
+                        ? null
+                        : () async {
+                            setState(() => _syncing = true);
+                            try {
+                              final r = await StudentsSyncService.instance.syncPending();
+                              await _loadData();
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Sync: ${r.succeeded}/${r.processed} OK, ${r.failed} échec(s)',
+                                  ),
+                                ),
+                              );
+                            } finally {
+                              if (mounted) setState(() => _syncing = false);
+                            }
+                          },
+                    icon: _syncing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Icon(Icons.sync),
+                              if (_pendingSyncCount > 0)
+                                Positioned(
+                                  right: -10,
+                                  top: -6,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      _pendingSyncCount > 99
+                                          ? '99+'
+                                          : _pendingSyncCount.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.shadowDark.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  color: theme.iconTheme.color,
-                  size: 20,
-                ),
+                    child: Icon(
+                      Icons.notifications_outlined,
+                      color: theme.iconTheme.color,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 12),
+          if (_remoteLoadWarning != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withOpacity(0.35)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.wifi_off, color: Colors.orange),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '$_dataSourceLabel — $_remoteLoadWarning',
+                      style: TextStyle(
+                        color: theme.textTheme.bodyMedium?.color,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ] else ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _dataSourceLabel,
+                    style: TextStyle(
+                      color: theme.textTheme.bodyMedium?.color?.withOpacity(0.75),
+                    ),
+                  ),
+                  if (_dataSourceLabel == 'Serveur (API)')
+                    Text(
+                      'Totaux classes: base locale (cohérent avec Détails de la classe).',
+                      style: TextStyle(
+                        color: theme.textTheme.bodySmall?.color?.withOpacity(0.75),
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (_isFilterLoading) ...[
+            const LinearProgressIndicator(minHeight: 2),
+            const SizedBox(height: 8),
+          ],
           TextField(
             decoration: InputDecoration(
               hintText: 'Rechercher par classe, année ou nom d\'élève...',
@@ -1323,7 +1634,7 @@ class _StudentsPageState extends State<StudentsPage> {
               prefixIcon: Icon(Icons.search, color: theme.iconTheme.color),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-              ),
+                ),
               contentPadding: EdgeInsets.symmetric(vertical: 0, horizontal: 16),
             ),
             onChanged: (value) {
@@ -1334,6 +1645,7 @@ class _StudentsPageState extends State<StudentsPage> {
                 _showStudentView = _isSearchingByStudentName(trimmedValue);
               });
             },
+            onSubmitted: (_) => _loadData(),
             style: TextStyle(color: theme.textTheme.bodyLarge?.color),
           ),
         ],
@@ -1408,8 +1720,12 @@ class _StudentsPageState extends State<StudentsPage> {
                         : Theme.of(context).textTheme.bodyMedium!.color,
                     fontWeight: FontWeight.w600,
                   ),
-                  onSelected: (_) =>
-                      setState(() => _selectedLevelFilter = null),
+                  onSelected: (_) async {
+                    setState(() => _selectedLevelFilter = null);
+                    if (_dataSourceLabel == 'Serveur (API)') {
+                      await _loadData(indicateFilterLoading: true);
+                    }
+                  },
                 ),
                 ...levels.map((level) {
                   final color = _levelColor(level);
@@ -1423,8 +1739,12 @@ class _StudentsPageState extends State<StudentsPage> {
                       color: selected ? color : color.withOpacity(0.9),
                       fontWeight: FontWeight.w600,
                     ),
-                    onSelected: (_) =>
-                        setState(() => _selectedLevelFilter = level),
+                    onSelected: (_) async {
+                      setState(() => _selectedLevelFilter = level);
+                      if (_dataSourceLabel == 'Serveur (API)') {
+                        await _loadData(indicateFilterLoading: true);
+                      }
+                    },
                   );
                 }),
               ],
@@ -1545,8 +1865,16 @@ class _StudentsPageState extends State<StudentsPage> {
                   ),
                 ),
               ],
-              onChanged: (value) =>
-                  setState(() => _selectedClassFilter = value),
+              onChanged: (value) async {
+                setState(() {
+                  _selectedClassFilter = value;
+                  final selectedClass = _classFromKey(value, _allClasses);
+                  if (selectedClass != null) {
+                    _selectedYearFilter = selectedClass.academicYear;
+                  }
+                });
+                await _loadData(indicateFilterLoading: true);
+              },
               dropdownColor: Theme.of(context).cardColor,
               iconEnabledColor: Theme.of(context).iconTheme.color,
               style: TextStyle(
@@ -1600,8 +1928,12 @@ class _StudentsPageState extends State<StudentsPage> {
                   ),
                 ),
               ],
-              onChanged: (value) =>
-                  setState(() => _selectedGenderFilter = value),
+              onChanged: (value) async {
+                setState(() => _selectedGenderFilter = value);
+                if (_dataSourceLabel == 'Serveur (API)') {
+                  await _loadData(indicateFilterLoading: true);
+                }
+              },
               dropdownColor: Theme.of(context).cardColor,
               iconEnabledColor: Theme.of(context).iconTheme.color,
               style: TextStyle(
@@ -1664,8 +1996,10 @@ class _StudentsPageState extends State<StudentsPage> {
                           ),
                         ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _selectedYearFilter = value),
+                  onChanged: (value) async {
+                    setState(() => _selectedYearFilter = value);
+                    await _loadData(indicateFilterLoading: true);
+                  },
                   dropdownColor: Theme.of(context).cardColor,
                   iconEnabledColor: Theme.of(context).iconTheme.color,
                   style: TextStyle(
@@ -1681,12 +2015,15 @@ class _StudentsPageState extends State<StudentsPage> {
             _selectedYearFilter != null ||
             _selectedLevelFilter != null)
           TextButton.icon(
-            onPressed: () => setState(() {
-              _selectedClassFilter = null;
-              _selectedGenderFilter = null;
-              _selectedYearFilter = _currentAcademicYear;
-              _selectedLevelFilter = null;
-            }),
+            onPressed: () async {
+              setState(() {
+                _selectedClassFilter = null;
+                _selectedGenderFilter = null;
+                _selectedYearFilter = _currentAcademicYear;
+                _selectedLevelFilter = null;
+              });
+              await _loadData(indicateFilterLoading: true);
+            },
             icon: Icon(
               Icons.clear,
               color: Theme.of(context).textTheme.bodyMedium!.color,
@@ -2125,26 +2462,14 @@ class _StudentsPageState extends State<StudentsPage> {
         content: StudentRegistrationForm(
           key: studentFormKey,
           student: student, // Pass the existing student data
+          onSyncResult: (result) {
+            _lastUpsertResult = result;
+          },
           onSubmit: () {
             _loadData();
             Navigator.pop(context);
-            // Afficher une notification de succès
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text('Élève modifié avec succès!'),
-                  ],
-                ),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 3),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+              _buildUpsertSnackBar(isUpdate: true),
             );
           },
         ),
@@ -2186,27 +2511,15 @@ class _StudentsPageState extends State<StudentsPage> {
                   title: AppStrings.addStudent,
                   content: StudentRegistrationForm(
                     key: studentFormKey,
+                    onSyncResult: (result) {
+                      _lastUpsertResult = result;
+                    },
                     onSubmit: () {
                       print('Student form submitted');
                       _loadData();
                       Navigator.pop(context);
-                      // Afficher une notification de succès
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text('Élève ajouté avec succès!'),
-                            ],
-                          ),
-                          backgroundColor: Colors.green,
-                          duration: Duration(seconds: 3),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                        _buildUpsertSnackBar(isUpdate: false),
                       );
                     },
                   ),
@@ -2773,6 +3086,12 @@ class _StudentsPageState extends State<StudentsPage> {
                   icon: Icon(Icons.edit, color: theme.primaryColor),
                   tooltip: 'Modifier l\'élève',
                 ),
+                if (!student.isDeleted)
+                  IconButton(
+                    onPressed: () => _deleteStudent(student),
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Supprimer l\'élève',
+                  ),
               ],
             )
           else

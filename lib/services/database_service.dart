@@ -341,6 +341,7 @@ class DatabaseService {
         await _ensureEvaluationTemplatesTable(db);
         await _ensureGradesTermColumn(db);
         await _ensureEvaluationTemplatesTermColumn(db);
+        await _ensurePendingSyncTable(db);
 
         // 2. Effectuer les nettoyages de doublons
         await _cleanupGradesDuplicates(db);
@@ -414,6 +415,19 @@ class DatabaseService {
             recordedBy TEXT,
             FOREIGN KEY (studentId) REFERENCES students(id) ON UPDATE CASCADE ON DELETE RESTRICT,
             FOREIGN KEY (className, classAcademicYear) REFERENCES classes(name, academicYear) ON UPDATE CASCADE ON DELETE RESTRICT
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS pending_sync(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entity TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            entityId TEXT NOT NULL,
+            payloadJson TEXT NOT NULL,
+            createdAt TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            lastError TEXT
           )
         ''');
         await db.execute('''
@@ -839,8 +853,27 @@ class DatabaseService {
     await _ensureClassFraisInscriptionColumn(db);
     await _ensureStudentTypeInscriptionColumn(db);
     await _ensureMockExamSessionsTable(db);
+    await _ensurePendingSyncTable(db);
     debugPrint(
       '[DatabaseService][MIGRATION] All post-open migrations completed',
+    );
+  }
+
+  Future<void> _ensurePendingSyncTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pending_sync(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        entityId TEXT NOT NULL,
+        payloadJson TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        lastError TEXT
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pending_sync_createdAt ON pending_sync(createdAt)',
     );
   }
 
@@ -4563,6 +4596,82 @@ class DatabaseService {
       [className, academicYear, academicYear],
     );
     return rows.map((m) => Student.fromMap(m)).toList();
+  }
+
+  Future<void> enqueuePendingSync({
+    required String entity,
+    required String operation,
+    required String entityId,
+    required String payloadJson,
+  }) async {
+    final db = await database;
+    await db.insert(
+      'pending_sync',
+      {
+        'entity': entity,
+        'operation': operation,
+        'entityId': entityId,
+        'payloadJson': payloadJson,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'attempts': 0,
+        'lastError': null,
+      },
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingSync({
+    String? entity,
+    int limit = 200,
+  }) async {
+    final db = await database;
+    final bounded = limit.clamp(1, 500);
+    return await db.query(
+      'pending_sync',
+      where: entity == null ? null : 'entity = ?',
+      whereArgs: entity == null ? null : [entity],
+      orderBy: 'createdAt ASC',
+      limit: bounded,
+    );
+  }
+
+  Future<void> markPendingSyncFailure(int id, String error) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final row = await txn.query(
+        'pending_sync',
+        columns: ['attempts'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final currentAttempts = (row.isNotEmpty ? (row.first['attempts'] as int?) : 0) ?? 0;
+      await txn.update(
+        'pending_sync',
+        {
+          'attempts': currentAttempts + 1,
+          'lastError': error,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  Future<void> deletePendingSync(int id) async {
+    final db = await database;
+    await db.delete('pending_sync', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> getPendingSyncCount({String? entity}) async {
+    final db = await database;
+    final row = await db.rawQuery(
+      entity == null
+          ? 'SELECT COUNT(*) AS c FROM pending_sync'
+          : 'SELECT COUNT(*) AS c FROM pending_sync WHERE entity = ?',
+      entity == null ? <Object?>[] : <Object?>[entity],
+    );
+    return (row.isNotEmpty ? (row.first['c'] as int?) : 0) ?? 0;
   }
 
   Future<List<Map<String, dynamic>>> getAttendanceEventsForStudent(

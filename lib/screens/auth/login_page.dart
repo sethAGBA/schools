@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:school_manager/config/api_config.dart';
 import 'package:school_manager/services/auth_service.dart';
 import 'package:school_manager/screens/auth/two_factor_page.dart';
+import 'package:school_manager/services/api/remote_auth_service.dart';
 import 'package:school_manager/services/database_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 
@@ -16,6 +18,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
+  final _tenantController = TextEditingController(text: ApiConfig.defaultTenantId);
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -42,8 +45,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       await prefs.setBool('remember_me', _rememberMe);
       if (_rememberMe) {
         await prefs.setString('remember_username', username);
+        await prefs.setString('remember_tenant', _tenantController.text.trim());
       } else {
         await prefs.remove('remember_username');
+        await prefs.remove('remember_tenant');
       }
     } catch (_) {}
     if (!mounted) return;
@@ -79,9 +84,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     SharedPreferences.getInstance().then((prefs) {
       final remembered = prefs.getBool('remember_me') ?? false;
       final username = prefs.getString('remember_username') ?? '';
+      final tenant = prefs.getString('remember_tenant') ?? '';
       if (mounted) {
         setState(() {
           _rememberMe = remembered;
+          if (tenant.isNotEmpty) {
+            _tenantController.text = tenant;
+          }
           if (remembered && username.isNotEmpty) {
             _usernameController.text = username;
           }
@@ -92,6 +101,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _tenantController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
     _animationController.dispose();
     super.dispose();
   }
@@ -103,9 +115,62 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       _error = null;
     });
     final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+    final tenantId = _tenantController.text.trim();
+
+    // Remote auth first for email-style accounts, then fallback to local auth.
+    if (username.contains('@')) {
+      final remoteRes = await RemoteAuthService.instance.login(
+        email: username,
+        password: password,
+        tenantId: tenantId,
+      );
+      if (remoteRes.ok) {
+        final remoteUsername = (remoteRes.username ?? username).trim();
+        final remoteRole = (remoteRes.role ?? 'staff').trim();
+        final bootstrapPassword =
+            'remote-${DateTime.now().millisecondsSinceEpoch}-${remoteUsername.hashCode}';
+
+        // Ensure a local profile exists so the local permission system works.
+        await AuthService.instance.createOrUpdateUser(
+          username: remoteUsername,
+          displayName: remoteUsername,
+          role: remoteRole,
+          password: bootstrapPassword,
+          enable2FA: false,
+        );
+        await AuthService.instance.finalizeLogin(remoteUsername);
+
+        setState(() {
+          _isLoading = false;
+        });
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('remember_me', _rememberMe);
+          if (_rememberMe) {
+            await prefs.setString('remember_username', username);
+            await prefs.setString('remember_tenant', tenantId);
+          } else {
+            await prefs.remove('remember_username');
+            await prefs.remove('remember_tenant');
+          }
+        } catch (_) {}
+        if (!mounted) return;
+        widget.onSuccess();
+        return;
+      }
+
+      // Show explicit backend error before local fallback.
+      if (mounted && remoteRes.error != null && remoteRes.error!.trim().isNotEmpty) {
+        setState(() {
+          _error = 'API: ${remoteRes.error} (fallback local active)';
+        });
+      }
+    }
+
     final res = await AuthService.instance.authenticatePassword(
-      _usernameController.text.trim(),
-      _passwordController.text,
+      username,
+      password,
     );
     setState(() {
       _isLoading = false;
@@ -554,6 +619,41 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                         ),
                                       ),
                                       const SizedBox(height: 32),
+
+                                      // Username field
+                                      TextFormField(
+                                        controller: _tenantController,
+                                        decoration: InputDecoration(
+                                          labelText: 'Tenant (école)',
+                                          prefixIcon: const Icon(
+                                            Icons.apartment_outlined,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            borderSide: const BorderSide(
+                                              color: Color(0xFF6366F1),
+                                              width: 2,
+                                            ),
+                                          ),
+                                          filled: true,
+                                          fillColor: theme
+                                              .inputDecorationTheme
+                                              .fillColor,
+                                        ),
+                                        textInputAction: TextInputAction.next,
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                            ? 'Tenant requis'
+                                            : null,
+                                      ),
+                                      const SizedBox(height: 20),
 
                                       // Username field
                                       TextFormField(
