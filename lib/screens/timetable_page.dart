@@ -14,6 +14,9 @@ import 'package:school_manager/services/scheduling_service.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/utils/academic_year.dart';
 import 'package:school_manager/utils/timetable_prefs.dart' as ttp;
+import 'package:school_manager/services/api/remote_timetable_service.dart';
+import 'package:school_manager/services/timetable_sync_service.dart';
+import 'package:school_manager/services/sync_manager.dart';
 // import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'dart:io';
@@ -189,7 +192,28 @@ class _TimetablePageState extends State<TimetablePage>
     final allTeachers = await _dbService.getStaff();
     final allSubjects = await _dbService.getCourses();
     final schoolInfo = await _dbService.getSchoolInfo();
-    final allEntries = await _dbService.getTimetableEntries();
+    
+    // 1. Sync pending
+    await TimetableSyncService.instance.syncPending();
+
+    List<TimetableEntry> allEntries = [];
+    try {
+      final remoteEntries = await RemoteTimetableService.instance.listEntries(
+        academicYear: effectiveYear,
+      );
+      final remoteTimetableEntries = remoteEntries.map((m) => TimetableEntry.fromMap(m)).toList();
+      final localEntries = await _dbService.getTimetableEntries();
+      final remoteIds = remoteTimetableEntries.map((e) => e.id).toSet();
+      
+      allEntries = [
+        ...remoteTimetableEntries,
+        ...localEntries.where((e) => !remoteIds.contains(e.id))
+      ];
+      debugPrint('[TimetablePage] Loaded ${allEntries.length} entries from Remote and Local merged');
+    } catch (e) {
+      debugPrint('[TimetablePage] Remote load failed, using local: $e');
+      allEntries = await _dbService.getTimetableEntries();
+    }
 
     // Filtrer par année académique courante
     _classes = allClasses.where((c) {
@@ -2537,6 +2561,7 @@ class _TimetablePageState extends State<TimetablePage>
                         }
                       }
                       await _dbService.insertTimetableEntry(toCreate);
+                      await TimetableSyncService.instance.upsertEntry(toCreate);
                     } else {
                       // Preserve duration when moving
                       int? _toMin(String s) {
@@ -2606,6 +2631,7 @@ class _TimetablePageState extends State<TimetablePage>
                         }
                       }
                       await _dbService.updateTimetableEntry(moved);
+                      await TimetableSyncService.instance.upsertEntry(moved);
                     }
                     await _loadData();
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -3161,6 +3187,7 @@ class _TimetablePageState extends State<TimetablePage>
                         }
                       }
                       await _dbService.insertTimetableEntry(toCreate);
+                      await TimetableSyncService.instance.upsertEntry(toCreate);
                     } else {
                       int? m(String s) => toMin(s);
                       String fmt(int v) =>
@@ -3217,6 +3244,7 @@ class _TimetablePageState extends State<TimetablePage>
                         }
                       }
                       await _dbService.updateTimetableEntry(moved);
+                      await TimetableSyncService.instance.upsertEntry(moved);
                     }
                     await _loadData();
                   },
@@ -4178,6 +4206,49 @@ class _TimetablePageState extends State<TimetablePage>
               ),
               Row(
                 children: [
+                  GestureDetector(
+                    onTap: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Synchronisation en cours...'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                      await SyncManager.instance.syncAll();
+                      if (mounted) {
+                        _loadData();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Synchronisation terminée'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: theme.dividerColor.withOpacity(0.2),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.sync,
+                        color: Color(0xFF6366F1),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -4588,6 +4659,7 @@ class _TimetablePageState extends State<TimetablePage>
 
                 if (entry == null) {
                   await _dbService.insertTimetableEntry(newEntry);
+                  await TimetableSyncService.instance.upsertEntry(newEntry);
                   scaffoldMessenger.showSnackBar(
                     const SnackBar(
                       content: Text('Cours ajouté avec succès.'),
@@ -4596,6 +4668,7 @@ class _TimetablePageState extends State<TimetablePage>
                   );
                 } else {
                   await _dbService.updateTimetableEntry(newEntry);
+                  await TimetableSyncService.instance.upsertEntry(newEntry);
                   scaffoldMessenger.showSnackBar(
                     const SnackBar(
                       content: Text('Cours modifié avec succès.'),
@@ -4662,13 +4735,23 @@ class _TimetablePageState extends State<TimetablePage>
                     false; // In case dialog is dismissed by tapping outside
 
                 if (confirmDelete) {
-                  final TimetableEntry? deletedEntry =
-                      entry; // Store the entry before deletion
-                  await _dbService.deleteTimetableEntry(
-                    deletedEntry!.id!,
-                  ); // Delete the entry
-                  Navigator.of(context).pop(); // Close the add/edit dialog
-                  _loadData(); // Reload data to update the display
+                  final TimetableEntry? deletedEntry = entry;
+                  if (deletedEntry != null) {
+                    await _dbService.deleteTimetableEntry(deletedEntry.id!);
+                    final res = await TimetableSyncService.instance.deleteEntry(deletedEntry);
+                    if (mounted) {
+                      if (res.usedOfflineFallback) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Supprimé localement (Mode Hors-ligne)'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                  Navigator.of(context).pop();
+                  _loadData();
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: const Text('Cours supprimé avec succès.'),

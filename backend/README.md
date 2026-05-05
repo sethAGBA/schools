@@ -136,3 +136,6 @@ Flux recommande:
 - Verifier TLS (certificat valide via Caddy)
 - Verifier sauvegardes PostgreSQL
 - Activer monitoring/alerting
+
+
+dotnet run --project src/SchoolManager.Api/SchoolManager.Api.csproj --urls "http://localhost:5000"

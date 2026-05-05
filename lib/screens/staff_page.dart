@@ -19,6 +19,8 @@ import 'package:open_file/open_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:school_manager/services/pdf_service.dart';
 import 'package:school_manager/services/auth_service.dart';
+import 'package:school_manager/services/staff_sync_service.dart';
+import 'package:school_manager/services/sync_manager.dart';
 
 class _TeacherAssignmentDraft {
   final String courseId;
@@ -93,11 +95,20 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
 
   Future<void> _loadStaff() async {
     setState(() => _isLoading = true);
-    final staff = await _dbService.getStaff();
-    setState(() {
-      _staffList = staff;
-      _isLoading = false;
-    });
+    try {
+      final staff = await StaffSyncService.instance.getAllStaff();
+      if (mounted) {
+        setState(() {
+          _staffList = staff;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading staff: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _loadCourses() async {
@@ -291,24 +302,68 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
                 ],
               ),
               // Notification icon back in place
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Synchronisation en cours...'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                      await SyncManager.instance.syncAll();
+                      if (mounted) {
+                        _loadStaff();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Synchronisation terminée'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.sync,
+                        color: Color(0xFF6366F1),
+                        size: 20,
+                      ),
                     ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  color: theme.iconTheme.color,
-                  size: 20,
-                ),
+                  ),
+                  SizedBox(width: 12),
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.notifications_outlined,
+                      color: theme.iconTheme.color,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -823,13 +878,16 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
           if (confirm == true) {
             try {
               await _dbService.deleteStaff(staff.id);
+              final syncRes = await StaffSyncService.instance.deleteStaff(staff.id);
               await _loadStaff();
               // Notification de succès pour la suppression
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Personnel supprimé avec succès !'),
-                    backgroundColor: Colors.green,
+                    content: Text(syncRes.usedOfflineFallback 
+                      ? 'Personnel supprimé (Mode Hors-ligne)' 
+                      : 'Personnel supprimé avec succès !'),
+                    backgroundColor: syncRes.usedOfflineFallback ? Colors.orange : Colors.green,
                     duration: Duration(seconds: 3),
                   ),
                 );
@@ -1235,24 +1293,30 @@ class _StaffPageState extends State<StaffPage> with TickerProviderStateMixin {
           );
           if (isEdit) {
             await _dbService.updateStaff(newStaff.id, newStaff);
+            final syncRes = await StaffSyncService.instance.upsertStaff(newStaff);
             // Notification de succès pour la modification
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Personnel modifié avec succès !'),
-                  backgroundColor: Colors.green,
+                  content: Text(syncRes.usedOfflineFallback 
+                    ? 'Personnel modifié (Mode Hors-ligne)' 
+                    : 'Personnel modifié avec succès !'),
+                  backgroundColor: syncRes.usedOfflineFallback ? Colors.orange : Colors.green,
                   duration: Duration(seconds: 3),
                 ),
               );
             }
           } else {
             await _dbService.insertStaff(newStaff);
+            final syncRes = await StaffSyncService.instance.upsertStaff(newStaff);
             // Notification de succès pour l'ajout
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Personnel ajouté avec succès !'),
-                  backgroundColor: Colors.green,
+                  content: Text(syncRes.usedOfflineFallback 
+                    ? 'Personnel ajouté (Mode Hors-ligne)' 
+                    : 'Personnel ajouté avec succès !'),
+                  backgroundColor: syncRes.usedOfflineFallback ? Colors.orange : Colors.green,
                   duration: Duration(seconds: 3),
                 ),
               );

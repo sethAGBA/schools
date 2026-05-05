@@ -335,13 +335,17 @@ class DatabaseService {
     debugPrint('[DatabaseService] Ouverture de la base à : $path');
     final db = await openDatabase(
       path,
-      version: 12, // v12: student new columns (placeOfBirth)
+      version: 13, // v13: timetable remote_id
       onOpen: (db) async {
         // 1. S'assurer que les tables/colonnes/index critiques existent
         await _ensureEvaluationTemplatesTable(db);
         await _ensureGradesTermColumn(db);
         await _ensureEvaluationTemplatesTermColumn(db);
         await _ensurePendingSyncTable(db);
+        await _ensureTimetableRemoteId(db);
+        await _ensureDisciplineRemoteId(db);
+        await _ensureExpenseRemoteId(db);
+        await _ensurePaymentRemoteId(db);
 
         // 2. Effectuer les nettoyages de doublons
         await _cleanupGradesDuplicates(db);
@@ -413,6 +417,7 @@ class DatabaseService {
             cancelReason TEXT,
             cancelBy TEXT,
             recordedBy TEXT,
+            remote_id TEXT,
             FOREIGN KEY (studentId) REFERENCES students(id) ON UPDATE CASCADE ON DELETE RESTRICT,
             FOREIGN KEY (className, classAcademicYear) REFERENCES classes(name, academicYear) ON UPDATE CASCADE ON DELETE RESTRICT
           )
@@ -575,7 +580,8 @@ class DatabaseService {
             amount REAL NOT NULL,
             date TEXT NOT NULL,
             className TEXT,
-            academicYear TEXT NOT NULL
+            academicYear TEXT NOT NULL,
+            remote_id TEXT
           )
         ''');
         await db.execute('''
@@ -854,6 +860,9 @@ class DatabaseService {
     await _ensureStudentTypeInscriptionColumn(db);
     await _ensureMockExamSessionsTable(db);
     await _ensurePendingSyncTable(db);
+    await _ensurePaymentRemoteId(db);
+    await _ensureExpenseRemoteId(db);
+    await _ensureDisciplineRemoteId(db);
     debugPrint(
       '[DatabaseService][MIGRATION] All post-open migrations completed',
     );
@@ -995,6 +1004,56 @@ class DatabaseService {
       } catch (e) {
         debugPrint('[DatabaseService] Error adding fraisInscription: $e');
       }
+    }
+  }
+
+  Future<void> _ensurePaymentRemoteId(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(payments)');
+    final has = cols.any((c) => c['name'] == 'remote_id');
+    if (!has) {
+      try {
+        await db.execute('ALTER TABLE payments ADD COLUMN remote_id TEXT');
+        debugPrint('[DatabaseService] Added column: remote_id on payments');
+      } catch (e) {
+        debugPrint('[DatabaseService] Error adding remote_id to payments: $e');
+      }
+    }
+  }
+
+  Future<void> _ensureExpenseRemoteId(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(expenses)');
+    final has = cols.any((c) => c['name'] == 'remote_id');
+    if (!has) {
+      try {
+        await db.execute('ALTER TABLE expenses ADD COLUMN remote_id TEXT');
+        debugPrint('[DatabaseService] Added column: remote_id on expenses');
+      } catch (e) {
+        debugPrint('[DatabaseService] Error adding remote_id to expenses: $e');
+      }
+    }
+  }
+
+  Future<void> _ensureDisciplineRemoteId(Database db) async {
+    final attCols = await db.rawQuery('PRAGMA table_info(attendance_events)');
+    if (!attCols.any((c) => c['name'] == 'remote_id')) {
+      try {
+        await db.execute('ALTER TABLE attendance_events ADD COLUMN remote_id TEXT');
+      } catch (_) {}
+    }
+    final sancCols = await db.rawQuery('PRAGMA table_info(sanction_events)');
+    if (!sancCols.any((c) => c['name'] == 'remote_id')) {
+      try {
+        await db.execute('ALTER TABLE sanction_events ADD COLUMN remote_id TEXT');
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _ensureTimetableRemoteId(Database db) async {
+    final cols = await db.rawQuery('PRAGMA table_info(timetable_entries)');
+    if (!cols.any((c) => c['name'] == 'remote_id')) {
+      try {
+        await db.execute('ALTER TABLE timetable_entries ADD COLUMN remote_id TEXT');
+      } catch (_) {}
     }
   }
 
@@ -1349,6 +1408,7 @@ class DatabaseService {
         recordedBy TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
+        remote_id TEXT,
         FOREIGN KEY (studentId) REFERENCES students(id) ON UPDATE CASCADE ON DELETE RESTRICT
       )
     ''');
@@ -1365,6 +1425,7 @@ class DatabaseService {
         recordedBy TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
+        remote_id TEXT,
         FOREIGN KEY (studentId) REFERENCES students(id) ON UPDATE CASCADE ON DELETE RESTRICT
       )
     ''');
@@ -3579,6 +3640,7 @@ class DatabaseService {
           startTime TEXT NOT NULL,
           endTime TEXT NOT NULL,
           room TEXT,
+          remote_id TEXT,
           FOREIGN KEY (className, academicYear) REFERENCES classes(name, academicYear) ON UPDATE CASCADE ON DELETE RESTRICT
         )
       ''',
@@ -4622,18 +4684,40 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getPendingSync({
     String? entity,
+    String? operation,
     int limit = 200,
   }) async {
     final db = await database;
     final bounded = limit.clamp(1, 500);
+    
+    String? where;
+    List<Object?>? args;
+    
+    if (entity != null && operation != null) {
+      where = 'entity = ? AND operation = ?';
+      args = [entity, operation];
+    } else if (entity != null) {
+      where = 'entity = ?';
+      args = [entity];
+    } else if (operation != null) {
+      where = 'operation = ?';
+      args = [operation];
+    }
+
     return await db.query(
       'pending_sync',
-      where: entity == null ? null : 'entity = ?',
-      whereArgs: entity == null ? null : [entity],
+      where: where,
+      whereArgs: args,
       orderBy: 'createdAt ASC',
       limit: bounded,
     );
   }
+
+  Future<List<Map<String, dynamic>>> getPendingSyncByEntity(String entity) => 
+      getPendingSync(entity: entity);
+
+  Future<void> incrementPendingSyncAttempts(int id, String error) => 
+      markPendingSyncFailure(id, error);
 
   Future<void> markPendingSyncFailure(int id, String error) async {
     final db = await database;
@@ -4994,9 +5078,10 @@ class DatabaseService {
     return {for (var item in result) item['academicYear']: item['count']};
   }
 
-  Future<void> insertPayment(Payment payment) async {
+  Future<Payment> insertPayment(Payment payment) async {
     final db = await database;
     String? usedReceiptNo;
+    int? insertedId;
     await db.transaction((txn) async {
       await _ensureStudentExists(txn, payment.studentId);
       await _ensureClassExists(
@@ -5013,7 +5098,7 @@ class DatabaseService {
       }
       usedReceiptNo = receiptNo;
       final map = payment.toMap()..['receiptNo'] = receiptNo;
-      await txn.insert(
+      insertedId = await txn.insert(
         'payments',
         map,
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -5027,6 +5112,17 @@ class DatabaseService {
             'student=${payment.studentId} class=${payment.className} amount=${payment.amount} receipt=${usedReceiptNo ?? ''}',
       );
     } catch (_) {}
+    return payment.copyWith(id: insertedId, receiptNo: usedReceiptNo);
+  }
+
+  Future<int> updatePayment(Payment payment) async {
+    final db = await database;
+    return await db.update(
+      'payments',
+      payment.toMap(),
+      where: 'id = ?',
+      whereArgs: [payment.id],
+    );
   }
 
   Future<String> _nextPaymentReceiptNo(
@@ -6611,6 +6707,22 @@ class DatabaseService {
     }
     return null;
   }
+
+  Future<List<Grade>> getGradesForStudent({
+    required String studentId,
+    required String className,
+    required String academicYear,
+    required String term,
+  }) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'grades',
+      where: 'studentId = ? AND className = ? AND academicYear = ? AND term = ?',
+      whereArgs: [studentId, className, academicYear, term],
+    );
+    return List.generate(maps.length, (i) => Grade.fromMap(maps[i]));
+  }
+
 
   Future<List<Grade>> getAllGradesForPeriod({
     required String className,

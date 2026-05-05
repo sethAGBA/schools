@@ -16,6 +16,7 @@
     <ProjectReference Include="..\Modules\Reporting\SchoolManager.Modules.Reporting\SchoolManager.Modules.Reporting.csproj" />
     <ProjectReference Include="..\Modules\Audit\SchoolManager.Modules.Audit\SchoolManager.Modules.Audit.csproj" />
     <ProjectReference Include="..\Modules\Documents\SchoolManager.Modules.Documents\SchoolManager.Modules.Documents.csproj" />
+    <ProjectReference Include="..\Modules\Staff\SchoolManager.Modules.Staff\SchoolManager.Modules.Staff.csproj" />
     <ProjectReference Include="..\SchoolManager.BuildingBlocks\SchoolManager.BuildingBlocks.csproj" />
   </ItemGroup>
 

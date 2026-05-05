@@ -16,6 +16,11 @@ import 'package:school_manager/utils/snackbar.dart';
 import 'package:school_manager/services/pdf_service.dart';
 
 import 'dart:io';
+import 'package:school_manager/services/api/remote_finance_service.dart';
+import 'package:school_manager/services/finance_sync_service.dart';
+import 'package:school_manager/services/api/remote_expense_service.dart';
+import 'package:school_manager/services/expense_sync_service.dart';
+import 'package:school_manager/services/sync_manager.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
@@ -24,12 +29,14 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:pdf/pdf.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:school_manager/screens/dashboard_home.dart';
+import 'package:school_manager/widgets/notification_center.dart';
 import 'package:school_manager/services/auth_service.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 class FinanceAndInventoryPage extends StatefulWidget {
-  const FinanceAndInventoryPage({super.key});
+  final Function(int)? onNavigate;
+  const FinanceAndInventoryPage({this.onNavigate, super.key});
 
   @override
   State<FinanceAndInventoryPage> createState() => _FinanceAndInventoryPageState();
@@ -78,6 +85,7 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
   List<String> _inventoryCategories = [];
   List<String> _inventoryConditions = [];
   List<String> _inventoryLocations = [];
+  bool _syncing = false;
   
   
 
@@ -1118,12 +1126,46 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
 
   Future<void> _loadExpenses() async {
     final selectedYear = _selectedYearFilter ?? await getCurrentAcademicYear();
-    final list = await _db.getExpenses(
-      className: _selectedClassFilter,
-      academicYear: selectedYear,
-      category: _selectedExpenseCategory,
-      supplier: _selectedExpenseSupplier,
-    );
+    
+    List<Expense> list;
+    try {
+      final remoteData = await RemoteExpenseService.instance.listExpenses(
+        academicYear: selectedYear,
+        category: _selectedExpenseCategory,
+      );
+      final remoteExpenses = remoteData.map((m) => Expense.fromMap(m)).toList();
+      final localExpenses = await _db.getExpenses(
+        className: _selectedClassFilter,
+        academicYear: selectedYear,
+        category: _selectedExpenseCategory,
+        supplier: _selectedExpenseSupplier,
+      );
+      final remoteIds = remoteExpenses.map((e) => e.id).toSet();
+      
+      list = [
+        ...remoteExpenses,
+        ...localExpenses.where((e) => !remoteIds.contains(e.id))
+      ];
+    } catch (e) {
+      debugPrint('Remote expense fetch failed, falling back to local: $e');
+      list = await _db.getExpenses(
+        className: _selectedClassFilter,
+        academicYear: selectedYear,
+        category: _selectedExpenseCategory,
+        supplier: _selectedExpenseSupplier,
+      );
+
+      if (mounted && (e.toString().contains('503') || e.toString().contains('SocketException'))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Réseau indisponible. Utilisation des données locales (Dépenses).'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
     final cats = list.map((e) => e.category ?? '').where((e) => e.isNotEmpty).toSet().toList()..sort();
     final supsFromExpenses = list.map((e) => e.supplier ?? '').where((e) => e.isNotEmpty).toSet().toList()..sort();
     final suppliers = await _db.getSuppliers();
@@ -1306,16 +1348,97 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                   ),
                 ]),
               ]),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Icon(Icons.notifications_outlined, color: theme.iconTheme.color, size: 20),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2)),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: _syncing
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.primary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.sync,
+                              color: theme.colorScheme.primary,
+                              size: 20,
+                            ),
+                      tooltip: 'Synchroniser / Actualiser',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _syncing
+                          ? null
+                          : () async {
+                              setState(() => _syncing = true);
+                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Synchronisation en cours...'),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+
+                              try {
+                                await SyncManager.instance.syncAll();
+                                await _loadData();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          const Icon(Icons.check_circle, color: Colors.white),
+                                          const SizedBox(width: 8),
+                                          const Text('Synchronisation terminée', style: TextStyle(color: Colors.white)),
+                                        ],
+                                      ),
+                                      backgroundColor: Colors.green,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                String errorMsg = 'Erreur de synchronisation : $e';
+                                if (e.toString().contains('503') || e.toString().contains('SocketException')) {
+                                  errorMsg = 'Réseau indisponible. Les données seront synchronisées plus tard.';
+                                }
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.cloud_off, color: Colors.white),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            errorMsg,
+                                            style: const TextStyle(color: Colors.white),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: Colors.redAccent,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              } finally {
+                                setState(() => _syncing = false);
+                              }
+                            },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  NotificationBell(onNavigate: widget.onNavigate),
+                ],
               ),
             ],
           ),
@@ -2716,6 +2839,26 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
                           if (ok && e.id != null) {
                             if (!_ensureWriteAllowed()) return;
                             await _db.deleteExpense(e.id!);
+                            final syncRes = await ExpenseSyncService.instance.deleteExpense(e);
+                            if (mounted) {
+                              if (syncRes.usedOfflineFallback) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Supprimé localement (Mode Hors-ligne)'),
+                                    backgroundColor: Colors.orange,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Dépense supprimée et synchronisée'),
+                                    backgroundColor: Colors.green,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            }
                             await _loadExpenses();
                             await _loadBudgetSummary();
                           }
@@ -3209,7 +3352,7 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
               }
             }
 
-            final expense = Expense(
+            Expense expense = Expense(
               id: existing?.id,
               label: labelCtrl.text.trim(),
               category: effectiveCategory,
@@ -3224,9 +3367,32 @@ class _FinanceAndInventoryPageState extends State<FinanceAndInventoryPage>
               academicYear: selectedYear,
             );
             if (existing == null) {
-              await _db.insertExpense(expense);
+              final newId = await _db.insertExpense(expense);
+              expense = expense.copyWith(id: newId);
             } else {
               await _db.updateExpense(expense);
+            }
+
+            // Sync with remote
+            final syncRes = await ExpenseSyncService.instance.upsertExpense(expense);
+            if (mounted) {
+              if (syncRes.usedOfflineFallback) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enregistré localement (Mode Hors-ligne)'),
+                    backgroundColor: Colors.orange,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Dépense enregistrée et synchronisée'),
+                    backgroundColor: Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             }
             Navigator.of(context).pop();
             await _loadExpenses();

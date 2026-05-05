@@ -11,12 +11,23 @@ import 'package:school_manager/services/pdf_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/utils/academic_year.dart';
 import 'package:school_manager/utils/snackbar.dart';
+import 'package:school_manager/services/api/remote_discipline_service.dart';
+import 'package:school_manager/services/discipline_sync_service.dart';
+import 'package:school_manager/models/attendance_event.dart';
+import 'package:school_manager/models/sanction_event.dart';
+import 'package:school_manager/widgets/notification_center.dart';
 
 class DisciplinePage extends StatefulWidget {
-  const DisciplinePage({super.key, this.data, this.initialAcademicYear});
+  const DisciplinePage({
+    super.key,
+    this.data,
+    this.initialAcademicYear,
+    this.onNavigate,
+  });
 
   final DisciplineData? data;
   final String? initialAcademicYear;
+  final Function(int)? onNavigate;
 
   static const Key tabAttendanceKey = Key('discipline_tab_attendance');
   static const Key tabSanctionsKey = Key('discipline_tab_sanctions');
@@ -44,6 +55,7 @@ class _DisciplinePageState extends State<DisciplinePage> {
   List<Map<String, dynamic>> _attendanceTotals = const [];
   List<Map<String, dynamic>> _attendanceEvents = const [];
   List<Map<String, dynamic>> _sanctionEvents = const [];
+  bool _syncing = false;
 
   @override
   void initState() {
@@ -66,21 +78,60 @@ class _DisciplinePageState extends State<DisciplinePage> {
       final students = await _data.getStudents(academicYear: _academicYear);
       students.sort((a, b) => a.name.compareTo(b.name));
 
-      final totals = await _data.getAttendanceTotals(
-        academicYear: _academicYear,
-        className: _selectedClassName,
-        studentId: _selectedStudent?.id,
-      );
-      final attendance = await _data.getAttendanceEvents(
-        academicYear: _academicYear,
-        className: _selectedClassName,
-        studentId: _selectedStudent?.id,
-      );
-      final sanctions = await _data.getSanctionEvents(
-        academicYear: _academicYear,
-        className: _selectedClassName,
-        studentId: _selectedStudent?.id,
-      );
+      List<Map<String, dynamic>> totals;
+      List<Map<String, dynamic>> attendance;
+      List<Map<String, dynamic>> sanctions;
+
+      try {
+        final remoteAttendance = await RemoteDisciplineService.instance.listAttendance(
+          academicYear: _academicYear,
+          className: _selectedClassName,
+          studentId: _selectedStudent?.id,
+        );
+        attendance = remoteAttendance;
+
+        final remoteSanctions = await RemoteDisciplineService.instance.listSanctions(
+          academicYear: _academicYear,
+          className: _selectedClassName,
+          studentId: _selectedStudent?.id,
+        );
+        sanctions = remoteSanctions;
+
+        // Note: totals are computed locally for now or we could have a specific endpoint
+        totals = await _data.getAttendanceTotals(
+          academicYear: _academicYear,
+          className: _selectedClassName,
+          studentId: _selectedStudent?.id,
+        );
+      } catch (e) {
+        debugPrint('Remote discipline fetch failed, falling back to local: $e');
+        totals = await _data.getAttendanceTotals(
+          academicYear: _academicYear,
+          className: _selectedClassName,
+          studentId: _selectedStudent?.id,
+        );
+        attendance = await _data.getAttendanceEvents(
+          academicYear: _academicYear,
+          className: _selectedClassName,
+          studentId: _selectedStudent?.id,
+        );
+        sanctions = await _data.getSanctionEvents(
+          academicYear: _academicYear,
+          className: _selectedClassName,
+          studentId: _selectedStudent?.id,
+        );
+
+        if (mounted && (e.toString().contains('503') || e.toString().contains('SocketException'))) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Réseau indisponible. Utilisation des données locales (Discipline).'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
 
       if (!mounted) return;
       setState(() {
@@ -515,8 +566,29 @@ class _DisciplinePageState extends State<DisciplinePage> {
         reason: reasonCtrl.text.trim(),
         recordedBy: by,
       );
+
+      final attEvent = AttendanceEvent(
+        id: id,
+        studentId: student!.id,
+        academicYear: _academicYear,
+        className: student!.className,
+        date: dt.toIso8601String(),
+        type: type,
+        minutes: minutes,
+        justified: justified,
+        reason: reasonCtrl.text.trim(),
+        recordedBy: by,
+      );
+      final syncRes = await DisciplineSyncService.instance.upsertAttendance(attEvent);
+
       await _load();
-      showSnackBar(context, 'Enregistré.');
+      if (mounted) {
+        if (syncRes.usedOfflineFallback) {
+          showSnackBar(context, 'Enregistré localement (Mode Hors-ligne)');
+        } else {
+          showSnackBar(context, 'Enregistré et synchronisé.');
+        }
+      }
 
       if (action == 'save_print') {
         final title = _documentTitleForEvent(kind: 'attendance', type: type);
@@ -702,8 +774,27 @@ class _DisciplinePageState extends State<DisciplinePage> {
         description: descCtrl.text.trim(),
         recordedBy: by,
       );
+
+      final sancEvent = SanctionEvent(
+        id: id,
+        studentId: student!.id,
+        academicYear: _academicYear,
+        className: student!.className,
+        date: dt.toIso8601String(),
+        type: type,
+        description: descCtrl.text.trim(),
+        recordedBy: by,
+      );
+      final syncRes = await DisciplineSyncService.instance.upsertSanction(sancEvent);
+
       await _load();
-      showSnackBar(context, 'Enregistré.');
+      if (mounted) {
+        if (syncRes.usedOfflineFallback) {
+          showSnackBar(context, 'Enregistré localement (Mode Hors-ligne)');
+        } else {
+          showSnackBar(context, 'Enregistré et synchronisé.');
+        }
+      }
 
       if (action == 'save_print') {
         final title = _documentTitleForEvent(kind: 'sanction', type: type);
@@ -789,6 +880,75 @@ class _DisciplinePageState extends State<DisciplinePage> {
       child: Icon(icon, color: theme.iconTheme.color, size: 20),
     );
 
+    final syncBtn = Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: _syncing
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(Icons.sync, color: theme.colorScheme.primary, size: 20),
+        tooltip: 'Synchroniser',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        onPressed: _syncing
+            ? null
+            : () async {
+                setState(() => _syncing = true);
+                try {
+                  final res = await DisciplineSyncService.instance.syncPending();
+                  if (res.processed > 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Synchronisation terminée : ${res.succeeded} réussis, ${res.failed} échoués.',
+                        ),
+                        backgroundColor: res.failed > 0 ? Colors.orange : Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Données à jour.'),
+                        backgroundColor: Colors.blueGrey,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                  await _load();
+                } catch (e) {
+                   String errorMsg = 'Erreur: $e';
+                   if (e.toString().contains('503') || e.toString().contains('SocketException')) {
+                     errorMsg = 'Réseau indisponible.';
+                   }
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(errorMsg),
+                      backgroundColor: Colors.redAccent,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } finally {
+                  setState(() => _syncing = false);
+                }
+              },
+      ),
+    );
+
     final headline = Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -840,7 +1000,13 @@ class _DisciplinePageState extends State<DisciplinePage> {
             ],
           ),
         ),
-        iconBox(Icons.notifications_outlined),
+        Row(
+          children: [
+            syncBtn,
+            const SizedBox(width: 12),
+            NotificationBell(onNavigate: widget.onNavigate),
+          ],
+        ),
       ],
     );
 
@@ -1192,13 +1358,25 @@ class _DisciplinePageState extends State<DisciplinePage> {
                           subtitle: Text(subtitleParts.join(' • ')),
                           trailing: IconButton(
                             tooltip: 'Supprimer',
-                            onPressed: id == null
+                            onPressed: (id == null && e['id'] is! String)
                                 ? null
                                 : () => _confirmDelete(
                                     title: 'Supprimer ?',
                                     content: 'Supprimer cet enregistrement ?',
-                                    onDelete: () =>
-                                        _data.deleteAttendanceEvent(id: id),
+                                    onDelete: () async {
+                                        if (id != null) {
+                                          await _data.deleteAttendanceEvent(id: id);
+                                        }
+                                        final event = AttendanceEvent.fromMap(e);
+                                        final res = await DisciplineSyncService.instance.deleteAttendance(event);
+                                        if (mounted) {
+                                          if (res.usedOfflineFallback) {
+                                            showSnackBar(context, 'Supprimé localement (Mode Hors-ligne)');
+                                          } else {
+                                            showSnackBar(context, 'Supprimé et synchronisé');
+                                          }
+                                        }
+                                    },
                                   ),
                             icon: const Icon(Icons.delete_outline),
                           ),
@@ -1286,13 +1464,25 @@ class _DisciplinePageState extends State<DisciplinePage> {
                           subtitle: Text(subtitleParts.join(' • ')),
                           trailing: IconButton(
                             tooltip: 'Supprimer',
-                            onPressed: id == null
+                            onPressed: (id == null && e['id'] is! String)
                                 ? null
                                 : () => _confirmDelete(
                                     title: 'Supprimer ?',
                                     content: 'Supprimer cette sanction ?',
-                                    onDelete: () =>
-                                        _data.deleteSanctionEvent(id: id),
+                                    onDelete: () async {
+                                        if (id != null) {
+                                          await _data.deleteSanctionEvent(id: id);
+                                        }
+                                        final event = SanctionEvent.fromMap(e);
+                                        final res = await DisciplineSyncService.instance.deleteSanction(event);
+                                        if (mounted) {
+                                          if (res.usedOfflineFallback) {
+                                            showSnackBar(context, 'Supprimé localement (Mode Hors-ligne)');
+                                          } else {
+                                            showSnackBar(context, 'Supprimé et synchronisé');
+                                          }
+                                        }
+                                    },
                                   ),
                             icon: const Icon(Icons.delete_outline),
                           ),

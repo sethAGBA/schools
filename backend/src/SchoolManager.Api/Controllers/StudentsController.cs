@@ -129,7 +129,7 @@ public sealed class StudentsController(SchoolDbContext dbContext, IAuditLogger a
         {
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
-            DateOfBirth = request.DateOfBirth.Date,
+            DateOfBirth = DateTime.SpecifyKind(request.DateOfBirth.Date, DateTimeKind.Utc),
             Gender = request.Gender.Trim(),
             ClassName = request.ClassName.Trim(),
             AcademicYear = request.AcademicYear.Trim(),
@@ -189,7 +189,7 @@ public sealed class StudentsController(SchoolDbContext dbContext, IAuditLogger a
 
         student.FirstName = request.FirstName.Trim();
         student.LastName = request.LastName.Trim();
-        student.DateOfBirth = request.DateOfBirth.Date;
+        student.DateOfBirth = DateTime.SpecifyKind(request.DateOfBirth.Date, DateTimeKind.Utc);
         student.Gender = request.Gender.Trim();
         student.ClassName = request.ClassName.Trim();
         student.AcademicYear = request.AcademicYear.Trim();

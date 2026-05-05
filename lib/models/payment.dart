@@ -12,6 +12,7 @@ class Payment {
   final String? cancelReason;
   final String? cancelBy;
   final String? recordedBy;
+  final String? remoteId;
 
   Payment({
     this.id,
@@ -27,7 +28,41 @@ class Payment {
     this.cancelReason,
     this.cancelBy,
     this.recordedBy,
+    this.remoteId,
   });
+
+  Payment copyWith({
+    int? id,
+    String? studentId,
+    String? className,
+    String? classAcademicYear,
+    String? receiptNo,
+    double? amount,
+    String? date,
+    String? comment,
+    bool? isCancelled,
+    String? cancelledAt,
+    String? cancelReason,
+    String? cancelBy,
+    String? recordedBy,
+  }) {
+    return Payment(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      className: className ?? this.className,
+      classAcademicYear: classAcademicYear ?? this.classAcademicYear,
+      receiptNo: receiptNo ?? this.receiptNo,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      comment: comment ?? this.comment,
+      isCancelled: isCancelled ?? this.isCancelled,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      cancelReason: cancelReason ?? this.cancelReason,
+      cancelBy: cancelBy ?? this.cancelBy,
+      recordedBy: recordedBy ?? this.recordedBy,
+      remoteId: remoteId ?? this.remoteId,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -44,6 +79,7 @@ class Payment {
       'cancelReason': cancelReason,
       'cancelBy': cancelBy,
       'recordedBy': recordedBy,
+      'remote_id': remoteId,
     };
   }
 
@@ -67,6 +103,7 @@ class Payment {
       cancelReason: map['cancelReason'],
       cancelBy: map['cancelBy'],
       recordedBy: map['recordedBy'],
+      remoteId: map['remote_id']?.toString(),
     );
   }
 
@@ -90,6 +127,7 @@ class Payment {
       cancelReason: json['cancelReason'],
       cancelBy: json['cancelBy'],
       recordedBy: json['recordedBy'],
+      remoteId: json['id']?.toString() ?? json['remoteId']?.toString(),
     );
   }
 
@@ -108,6 +146,7 @@ class Payment {
       'cancelReason': cancelReason,
       'cancelBy': cancelBy,
       'recordedBy': recordedBy,
+      'remoteId': remoteId,
     };
-}
+  }
 }

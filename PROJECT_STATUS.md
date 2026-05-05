@@ -104,8 +104,12 @@ Cela permettra de valider l'architecture complete (API securisee + client hybrid
 
 
 
-
+docker start school-postgres
 
 cd C:\Users\LEGION\Desktop\Project\schools\backend
 
-dotnet run --project src/SchoolManager.Api/SchoolManager.Api.csproj --urls "[http://localhost:5000](http://localhost:5000)"
+dotnet run --project src/SchoolManager.Api/SchoolManager.Api.csproj --urls "http://localhost:5000"
+
+
+
+$headers = @{ 'X-Tenant-Id' = 'demo-school'; 'Content-Type' = 'application/json' }; $body = '{"email":"admin@school.local","password":"ChangeMeNow123!"}'; $login = Invoke-RestMethod -Uri http://localhost:5182/api/auth/login -Method POST -Headers $headers -Body $body; $token = $login.accessToken; $h = @{ 'Authorization' = "Bearer $token"; 'X-Tenant-Id' = 'demo-school'; 'Content-Type' = 'application/json' }; Write-Host "`n=== 1. CREATE STUDENT ==="; try { $b = '{"firstName":"Jean","lastName":"Dupont","dateOfBirth":"2010-05-15","gender":"M","className":"6eme A","academicYear":"2025-2026","guardianName":"Marie Dupont","guardianContact":"0600000001","contactNumber":"0600000002"}'; $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/students' -Method POST -Headers $h -Body $b; Write-Host "OK - ID: $($r.id)" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 2. LIST STUDENTS ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/students' -Headers $h; Write-Host "OK - $($r.total) students" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 3. LIST CLASSES ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/academics/classes' -Headers $h; Write-Host "OK - $($r.Count) classes" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 4. LIST PAYMENTS ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/finance/payments' -Headers $h; Write-Host "OK - $($r.Count) payments" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 5. LIST EXPENSES ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/finance/expenses' -Headers $h; Write-Host "OK - $($r.Count) expenses" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 6. LIST STAFF ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/staff' -Headers $h; Write-Host "OK - $($r.Count) staff" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 7. LIST TIMETABLE ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/timetable' -Headers $h; Write-Host "OK - $($r.Count) entries" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 8. LIST ATTENDANCE ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/discipline/attendance' -Headers $h; Write-Host "OK - $($r.Count) events" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== 9. LIST SANCTIONS ==="; try { $r = Invoke-RestMethod -Uri 'http://localhost:5182/api/discipline/sanctions' -Headers $h; Write-Host "OK - $($r.Count) sanctions" } catch { Write-Host "ERR: $_" }; Write-Host "`n=== ALL TESTS DONE ==="

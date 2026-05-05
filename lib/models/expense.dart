@@ -8,6 +8,7 @@ class Expense {
   final String date; // ISO8601
   final String? className;
   final String academicYear;
+  final String? remoteId;
 
   Expense({
     this.id,
@@ -19,7 +20,34 @@ class Expense {
     this.className,
     required this.academicYear,
     this.supplier,
+    this.remoteId,
   });
+
+  Expense copyWith({
+    int? id,
+    String? label,
+    String? category,
+    int? supplierId,
+    String? supplier,
+    double? amount,
+    String? date,
+    String? className,
+    String? academicYear,
+    String? remoteId,
+  }) {
+    return Expense(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      category: category ?? this.category,
+      supplierId: supplierId ?? this.supplierId,
+      supplier: supplier ?? this.supplier,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      className: className ?? this.className,
+      academicYear: academicYear ?? this.academicYear,
+      remoteId: remoteId ?? this.remoteId,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -31,6 +59,7 @@ class Expense {
         'className': className,
         'academicYear': academicYear,
         'supplier': supplier,
+        'remote_id': remoteId,
       };
 
   factory Expense.fromMap(Map<String, dynamic> m) => Expense(
@@ -45,5 +74,6 @@ class Expense {
         className: m['className'],
         academicYear: m['academicYear'] ?? '',
         supplier: m['supplier'],
+        remoteId: m['id']?.toString() ?? m['remote_id']?.toString(),
       );
 }

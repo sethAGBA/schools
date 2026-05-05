@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SchoolManager.Api.Data;
@@ -11,9 +12,11 @@ using SchoolManager.Api.Data;
 namespace SchoolManager.Api.Data.Migrations
 {
     [DbContext(typeof(SchoolDbContext))]
-    partial class SchoolDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260504123251_AddDisciplineEntities")]
+    partial class AddDisciplineEntities
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -176,81 +179,6 @@ namespace SchoolManager.Api.Data.Migrations
                     b.HasIndex("TenantId", "ClassRoomId");
 
                     b.ToTable("subjects", (string)null);
-                });
-
-            modelBuilder.Entity("SchoolManager.Modules.Academics.TimetableEntry", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AcademicYear")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("academic_year");
-
-                    b.Property<string>("ClassName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("class_name");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("DayOfWeek")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("day_of_week");
-
-                    b.Property<string>("EndTime")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("end_time");
-
-                    b.Property<string>("Room")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("room");
-
-                    b.Property<string>("StartTime")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("start_time");
-
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("subject");
-
-                    b.Property<string>("Teacher")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("teacher");
-
-                    b.Property<string>("TenantId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "ClassName", "AcademicYear");
-
-                    b.ToTable("timetable_entries", (string)null);
                 });
 
             modelBuilder.Entity("SchoolManager.Modules.Audit.AuditLog", b =>
@@ -607,216 +535,6 @@ namespace SchoolManager.Api.Data.Migrations
                     b.HasIndex("TenantId", "UserId");
 
                     b.ToTable("refresh_tokens", (string)null);
-                });
-
-            modelBuilder.Entity("SchoolManager.Modules.Staff.StaffMember", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Address")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("address");
-
-                    b.Property<double?>("BaseSalary")
-                        .HasColumnType("double precision")
-                        .HasColumnName("base_salary");
-
-                    b.Property<string>("BirthDate")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("birth_date");
-
-                    b.Property<string>("BirthPlace")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("birth_place");
-
-                    b.Property<string>("Classes")
-                        .HasColumnType("text")
-                        .HasColumnName("classes");
-
-                    b.Property<string>("ContractType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("contract_type");
-
-                    b.Property<string>("Courses")
-                        .HasColumnType("text")
-                        .HasColumnName("courses");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("Department")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("department");
-
-                    b.Property<string>("Documents")
-                        .HasColumnType("text")
-                        .HasColumnName("documents");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(320)
-                        .HasColumnType("character varying(320)")
-                        .HasColumnName("email");
-
-                    b.Property<int?>("ExperienceYears")
-                        .HasColumnType("integer")
-                        .HasColumnName("experience_years");
-
-                    b.Property<string>("FirstName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("first_name");
-
-                    b.Property<string>("Gender")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("gender");
-
-                    b.Property<string>("HighestDegree")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("highest_degree");
-
-                    b.Property<string>("HireDate")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("hire_date");
-
-                    b.Property<string>("IdNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("id_number");
-
-                    b.Property<string>("LastName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("last_name");
-
-                    b.Property<string>("Levels")
-                        .HasColumnType("text")
-                        .HasColumnName("levels");
-
-                    b.Property<string>("MaritalStatus")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("marital_status");
-
-                    b.Property<string>("Matricule")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("matricule");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Nationality")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("nationality");
-
-                    b.Property<int?>("NumberOfChildren")
-                        .HasColumnType("integer")
-                        .HasColumnName("number_of_children");
-
-                    b.Property<string>("Phone")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("phone");
-
-                    b.Property<string>("PhotoPath")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("photo_path");
-
-                    b.Property<string>("PreviousInstitution")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("previous_institution");
-
-                    b.Property<string>("Qualifications")
-                        .HasColumnType("text")
-                        .HasColumnName("qualifications");
-
-                    b.Property<string>("Region")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("region");
-
-                    b.Property<string>("RetirementDate")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("retirement_date");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("role");
-
-                    b.Property<string>("SocialSecurityNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("social_security_number");
-
-                    b.Property<string>("Specialty")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("specialty");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("status");
-
-                    b.Property<string>("Supervisor")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("supervisor");
-
-                    b.Property<string>("TenantId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<string>("TypeRole")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("type_role");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.Property<int?>("WeeklyHours")
-                        .HasColumnType("integer")
-                        .HasColumnName("weekly_hours");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Matricule")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "Name");
-
-                    b.ToTable("staff", (string)null);
                 });
 
             modelBuilder.Entity("SchoolManager.Modules.Students.AttendanceEvent", b =>

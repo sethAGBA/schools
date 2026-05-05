@@ -315,6 +315,7 @@ Ce document suit l'évolution du projet et planifie les prochaines étapes de d�
 - [x] Import/Export Excel pour les notes.
 - [x] Audit Trail (Journal d'audit pour les transactions).
 - [x] Paramètres généraux de l'établissement.
+- [x] **Connexion Backend (Hybrid)** : Migration Academics (Classes, Subjects, Grades) vers mode hybride API + Offline.
 
 ## 🚀 En cours : Module Examens Blancs
 - [ ] **Écran Dédié** : Créer `mock_exams_page.dart` pour la gestion isolée des sessions d'examens.

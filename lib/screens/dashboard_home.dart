@@ -11,6 +11,8 @@ import 'package:school_manager/utils/date_formatter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:school_manager/services/license_service.dart';
 import 'package:school_manager/screens/students/student_profile_page.dart';
+import 'package:school_manager/services/notification_service.dart';
+import 'package:school_manager/widgets/notification_center.dart';
 
 ValueNotifier<String> academicYearNotifier = ValueNotifier<String>('2024-2025');
 
@@ -44,10 +46,10 @@ class _DashboardHomeState extends State<DashboardHome>
   List<FlSpot> _enrollmentSpots = [];
   List<String> _enrollmentMonths = []; // New: to store month labels
   List<_UnpaidClassSummary> _topUnpaidClasses = [];
-  List<_UnpaidStudentSummary> _topUnpaidStudents = [];
+  List<UnpaidStudentSummary> _topUnpaidStudents = [];
   int _overdueLoansCount = 0;
-  List<_OverdueLoanSummary> _overdueLoansPreview = [];
-  List<_DueItem> _dueSoonItems = [];
+  List<OverdueLoanSummary> _overdueLoansPreview = [];
+  List<DueItem> _dueSoonItems = [];
   int _recentSanctionsCount = 0;
   bool _isLoading = true;
 
@@ -412,126 +414,13 @@ class _DashboardHomeState extends State<DashboardHome>
       }
       unpaidClasses.sort((a, b) => b.remaining.compareTo(a.remaining));
 
-      // Impayés détaillés par élève (top 10)
-      final Map<String, double> unitFeeByClass = {};
-      for (final c in classes) {
-        unitFeeByClass[c.name] =
-            (c.ecolage ?? 0.0) + (c.fraisCotisationParallele ?? 0.0);
-      }
-      final Map<String, double> paidByStudent = {};
-      for (final p in payments.where(
-        (p) => p.classAcademicYear == currentYear && !p.isCancelled,
-      )) {
-        paidByStudent[p.studentId] =
-            (paidByStudent[p.studentId] ?? 0.0) + p.amount;
-      }
-      final unpaidStudents = <_UnpaidStudentSummary>[];
-      for (final s in students) {
-        final expected = unitFeeByClass[s.className] ?? 0.0;
-        if (expected <= 0) continue;
-        final paid = paidByStudent[s.id] ?? 0.0;
-        final remaining = (expected - paid) < 0 ? 0.0 : (expected - paid);
-        if (remaining <= 0) continue;
-        unpaidStudents.add(
-          _UnpaidStudentSummary(
-            studentId: s.id,
-            studentName: s.name,
-            className: s.className,
-            expected: expected,
-            paid: paid,
-            remaining: remaining,
-            student: s,
-          ),
-        );
-      }
-      unpaidStudents.sort((a, b) => b.remaining.compareTo(a.remaining));
-
-      // Bibliothèque: emprunts en retard (année en cours)
-      int overdueCount = 0;
-      final overduePreview = <_OverdueLoanSummary>[];
-      final dueSoon = <_DueItem>[];
-      try {
-        final loans = await _dbService.getLibraryLoansView(onlyActive: true);
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
-        final soonCutoff = today.add(const Duration(days: 7));
-        for (final row in loans) {
-          final studentYear = (row['studentAcademicYear'] as String?) ?? '';
-          if (studentYear != currentYear) continue;
-          final dueRaw = row['dueDate']?.toString();
-          if (dueRaw == null || dueRaw.trim().isEmpty) continue;
-          final due = DateTime.tryParse(dueRaw);
-          if (due == null) continue;
-          final normalizedDue = DateTime(due.year, due.month, due.day);
-          final studentName = (row['studentName'] as String?) ?? 'Inconnu';
-          final className = (row['studentClassName'] as String?) ?? '';
-          final bookTitle = (row['bookTitle'] as String?) ?? '';
-          if (normalizedDue.isBefore(today)) {
-            overdueCount += 1;
-            if (overduePreview.length < 5) {
-              overduePreview.add(
-                _OverdueLoanSummary(
-                  loanId: (row['loanId'] as int?) ?? 0,
-                  studentName: studentName,
-                  className: className,
-                  bookTitle: bookTitle,
-                  dueDate: normalizedDue,
-                ),
-              );
-            }
-          } else if (!normalizedDue.isAfter(soonCutoff)) {
-            dueSoon.add(
-              _DueItem(
-                date: normalizedDue,
-                title: 'Retour livre',
-                subtitle:
-                    '$studentName${className.trim().isEmpty ? '' : ' • $className'} • $bookTitle',
-                kind: _DueKind.library,
-              ),
-            );
-          }
-        }
-      } catch (_) {}
-
-      // Licence: échéance proche (<= 14 jours)
-      try {
-        final st = await LicenseService.instance.getStatus();
-        if (st.isActive && st.expiry != null) {
-          final days = st.daysRemaining;
-          if (days <= 14 && days >= 0) {
-            final exp = st.expiry!;
-            final d = DateTime(exp.year, exp.month, exp.day);
-            dueSoon.add(
-              _DueItem(
-                date: d,
-                title: 'Licence',
-                subtitle: 'Expire dans ${days} jour(s)',
-                kind: _DueKind.license,
-              ),
-            );
-          }
-        }
-      } catch (_) {}
-
-      dueSoon.sort((a, b) => a.date.compareTo(b.date));
-
-      // Discipline: sanctions des 7 derniers jours (année en cours)
-      int sanctions7d = 0;
-      try {
-        final list = await _dbService.getSanctionEvents(
-          academicYear: currentYear,
-        );
-        final cutoff = DateTime.now().subtract(const Duration(days: 7));
-        for (final row in list) {
-          final dateRaw = row['date']?.toString();
-          if (dateRaw == null || dateRaw.trim().isEmpty) continue;
-          final dt =
-              DateTime.tryParse(dateRaw) ??
-              DateTime.tryParse(dateRaw.replaceFirst(' ', 'T'));
-          if (dt == null) continue;
-          if (dt.isAfter(cutoff)) sanctions7d += 1;
-        }
-      } catch (_) {}
+      // Use NotificationService for unified alerts logic
+      final alerts = await NotificationService.instance.fetchAlerts(currentYear);
+      final unpaidStudents = alerts.topUnpaidStudents;
+      final overdueCount = alerts.overdueLoansCount;
+      final overduePreview = alerts.overdueLoansPreview;
+      final dueSoon = alerts.dueSoonItems;
+      final sanctions7d = alerts.recentSanctionsCount;
 
       // Fetch enrollment data for chart (année en cours uniquement)
       final Map<String, int> monthlyMap = {};
@@ -749,29 +638,7 @@ class _DashboardHomeState extends State<DashboardHome>
                               ),
                             ),
                             SizedBox(width: 16),
-                            Container(
-                              padding: EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: theme.cardColor,
-                                borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 4,
-                                    offset: Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(8),
-                                onTap: _openNotificationsCenter,
-                                child: Icon(
-                                  Icons.notifications_outlined,
-                                  color: theme.iconTheme.color,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                            NotificationBell(onNavigate: widget.onNavigate),
                           ],
                         ),
                       ],
@@ -1389,7 +1256,7 @@ class _DashboardHomeState extends State<DashboardHome>
             )
           else
             Column(
-              children: _dueSoonItems.take(5).map((it) {
+              children: _dueSoonItems.take(5).map<Widget>((it) {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
@@ -2018,358 +1885,27 @@ class _DashboardHomeState extends State<DashboardHome>
   }
 
   Future<void> _openNotificationsCenter() async {
-    final fmt = NumberFormat.currency(
-      locale: 'fr_FR',
-      symbol: 'FCFA',
-      decimalDigits: 0,
-    );
+    final year = academicYearNotifier.value;
+    final alerts = await NotificationService.instance.fetchAlerts(year);
+    if (!mounted) return;
 
     await showDialog(
       context: context,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return Dialog(
-          insetPadding: const EdgeInsets.all(24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: theme.cardColor,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Header
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          const Color(0xFF6366F1).withOpacity(0.16),
-                          const Color(0xFF8B5CF6).withOpacity(0.10),
-                        ],
-                      ),
-                      border: Border(
-                        bottom: BorderSide(
-                          color: theme.dividerColor.withOpacity(0.25),
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.notifications_outlined,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Centre de notifications',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Année ${academicYearNotifier.value}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.textTheme.bodyMedium?.color
-                                      ?.withOpacity(0.75),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Fermer',
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Content
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _navChip(
-                                ctx,
-                                icon: Icons.payment,
-                                label: 'Paiements',
-                                onTap: () {
-                                  Navigator.of(ctx).pop();
-                                  widget.onNavigate(4);
-                                },
-                              ),
-                              _navChip(
-                                ctx,
-                                icon: Icons.local_library_outlined,
-                                label: 'Bibliothèque',
-                                onTap: () {
-                                  Navigator.of(ctx).pop();
-                                  widget.onNavigate(14);
-                                },
-                              ),
-                              _navChip(
-                                ctx,
-                                icon: Icons.gavel_outlined,
-                                label: 'Discipline',
-                                onTap: () {
-                                  Navigator.of(ctx).pop();
-                                  widget.onNavigate(15);
-                                },
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
-                          _buildNotificationSectionCard(
-                            ctx,
-                            icon: Icons.account_balance_wallet_outlined,
-                            iconColor: const Color(0xFFF59E0B),
-                            title: 'Impayés',
-                            subtitle:
-                                'Reste à encaisser (estimation): ${fmt.format(_remainingRevenue)}',
-                            child: _topUnpaidStudents.isEmpty
-                                ? Text(
-                                    'Aucun impayé détecté.',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.textTheme.bodyMedium?.color
-                                          ?.withOpacity(0.7),
-                                    ),
-                                  )
-                                : Column(
-                                    children: _topUnpaidStudents.take(10).map((
-                                      s,
-                                    ) {
-                                      return _notificationListTile(
-                                        title:
-                                            '${s.studentName} • ${s.className}',
-                                        subtitle:
-                                            'Reste: ${fmt.format(s.remaining)}',
-                                        trailing: TextButton(
-                                          onPressed: () async {
-                                            Navigator.of(ctx).pop();
-                                            await _openStudentProfile(
-                                              StudentProfilePage(
-                                                student: s.student,
-                                              ),
-                                            );
-                                          },
-                                          child: const Text('Profil'),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          _buildNotificationSectionCard(
-                            ctx,
-                            icon: Icons.event_available_outlined,
-                            iconColor: const Color(0xFF0EA5E9),
-                            title: 'Échéances',
-                            subtitle: _dueSoonItems.isEmpty
-                                ? 'Aucune échéance détectée.'
-                                : '${_dueSoonItems.length} échéance(s) dans les 7 jours',
-                            child: _dueSoonItems.isEmpty
-                                ? const SizedBox.shrink()
-                                : Column(
-                                    children: _dueSoonItems.map((it) {
-                                      return _notificationListTile(
-                                        leading: _dueKindDot(it.kind),
-                                        title:
-                                            '${DateFormat('dd/MM/yyyy').format(it.date)} • ${it.title}',
-                                        subtitle: it.subtitle,
-                                      );
-                                    }).toList(),
-                                  ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          _buildNotificationSectionCard(
-                            ctx,
-                            icon: Icons.local_library_outlined,
-                            iconColor: const Color(0xFF10B981),
-                            title: 'Bibliothèque',
-                            subtitle: _overdueLoansCount > 0
-                                ? '${_overdueLoansCount} emprunt(s) en retard'
-                                : 'Aucun retard détecté',
-                            child: _overdueLoansPreview.isEmpty
-                                ? const SizedBox.shrink()
-                                : Column(
-                                    children: _overdueLoansPreview.map((l) {
-                                      return _notificationListTile(
-                                        leading: const Icon(
-                                          Icons.error_outline,
-                                          color: Color(0xFFEF4444),
-                                        ),
-                                        title: l.studentName,
-                                        subtitle:
-                                            '${l.className} • ${l.bookTitle} • échéance ${DateFormat('dd/MM/yyyy').format(l.dueDate)}',
-                                      );
-                                    }).toList(),
-                                  ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          _buildNotificationSectionCard(
-                            ctx,
-                            icon: Icons.gavel_outlined,
-                            iconColor: const Color(0xFF8B5CF6),
-                            title: 'Discipline',
-                            subtitle: _recentSanctionsCount > 0
-                                ? '${_recentSanctionsCount} sanction(s) ces 7 derniers jours'
-                                : 'Rien à signaler cette semaine',
-                            child: const SizedBox.shrink(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildNotificationSectionCard(
-    BuildContext context, {
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    required Widget child,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: iconColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.textTheme.bodyMedium?.color?.withOpacity(
-                          0.75,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (child is! SizedBox) ...[const SizedBox(height: 10), child],
-        ],
+      builder: (ctx) => NotificationCenterDialog(
+        alerts: alerts,
+        academicYear: year,
+        onNavigate: widget.onNavigate,
       ),
     );
   }
 
-  Widget _notificationListTile({
-    Widget? leading,
-    required String title,
-    String? subtitle,
-    Widget? trailing,
-  }) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: leading == null
-          ? null
-          : Padding(padding: const EdgeInsets.only(top: 6), child: leading),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle),
-      trailing: trailing,
-    );
-  }
-
-  Widget _navChip(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    return ActionChip(
-      avatar: Icon(icon, size: 18, color: theme.colorScheme.primary),
-      label: Text(label),
-      onPressed: onTap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-    );
-  }
-
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  Widget _dueKindDot(_DueKind kind) {
-    Color c;
+  Widget _dueKindDot(DueKind kind) {
+    Color c = Colors.grey;
     switch (kind) {
-      case _DueKind.library:
+      case DueKind.library:
         c = const Color(0xFF10B981);
         break;
-      case _DueKind.license:
+      case DueKind.license:
         c = const Color(0xFF3B82F6);
         break;
     }
@@ -2379,6 +1915,9 @@ class _DashboardHomeState extends State<DashboardHome>
       decoration: BoxDecoration(color: c, shape: BoxShape.circle),
     );
   }
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 class _UnpaidClassSummary {
@@ -2393,55 +1932,6 @@ class _UnpaidClassSummary {
     required this.expected,
     required this.paid,
     required this.remaining,
-  });
-}
-
-class _OverdueLoanSummary {
-  final int loanId;
-  final String studentName;
-  final String className;
-  final String bookTitle;
-  final DateTime dueDate;
-  const _OverdueLoanSummary({
-    required this.loanId,
-    required this.studentName,
-    required this.className,
-    required this.bookTitle,
-    required this.dueDate,
-  });
-}
-
-enum _DueKind { library, license }
-
-class _DueItem {
-  final DateTime date;
-  final String title;
-  final String subtitle;
-  final _DueKind kind;
-  const _DueItem({
-    required this.date,
-    required this.title,
-    required this.subtitle,
-    required this.kind,
-  });
-}
-
-class _UnpaidStudentSummary {
-  final String studentId;
-  final String studentName;
-  final String className;
-  final double expected;
-  final double paid;
-  final double remaining;
-  final Student student;
-  const _UnpaidStudentSummary({
-    required this.studentId,
-    required this.studentName,
-    required this.className,
-    required this.expected,
-    required this.paid,
-    required this.remaining,
-    required this.student,
   });
 }
 

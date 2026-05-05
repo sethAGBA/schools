@@ -33,6 +33,7 @@ import 'services/safe_mode_service.dart';
 import 'screens/statistiques/statistics_page.dart';
 import 'screens/grades/mock_exams_page.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:school_manager/services/sync_manager.dart';
 
 const List<String> kFontFallback = [
   // Common system fonts with broad glyph coverage
@@ -124,6 +125,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _onLoginSuccess() async {
+    // Start global sync in background
+    SyncManager.instance.syncAll();
+
     // After successful login (and 2FA if any), always navigate to dashboard
     // The "remember_me" preference only affects future app launches, not immediate navigation.
     appNavigatorKey.currentState?.pushReplacement(
@@ -309,19 +313,19 @@ class _SchoolDashboardState extends State<SchoolDashboard>
       DashboardHome(onNavigate: _onMenuItemSelected),
       StudentsPage(),
       StaffPage(),
-      GradesPage(),
+      GradesPage(onNavigate: _onMenuItemSelected),
       PaymentsPage(),
       SettingsPage(),
       const UsersManagementPage(),
       const TimetablePage(),
       const app_license.LicensePage(),
       const SubjectsPage(),
-      const FinanceAndInventoryPage(),
+      FinanceAndInventoryPage(onNavigate: _onMenuItemSelected),
       const AuditPage(),
       const SafeModePage(),
       const SignaturesPage(),
       const LibraryPage(),
-      const DisciplinePage(),
+      DisciplinePage(onNavigate: _onMenuItemSelected),
       const StatisticsPage(),
       const MockExamsPage(),
     ];

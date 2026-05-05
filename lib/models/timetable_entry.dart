@@ -8,6 +8,7 @@ class TimetableEntry {
   final String startTime;
   final String endTime;
   final String room;
+  final String? remoteId;
 
   TimetableEntry({
     this.id,
@@ -19,25 +20,28 @@ class TimetableEntry {
     required this.startTime,
     required this.endTime,
     required this.room,
+    this.remoteId,
   });
 
   factory TimetableEntry.fromMap(Map<String, dynamic> map) {
+    final rawId = map['id'];
     return TimetableEntry(
-      id: map['id'] as int?,
-      subject: map['subject'] as String,
-      teacher: map['teacher'] as String,
-      className: map['className'] as String,
-      academicYear: map['academicYear'] as String,
-      dayOfWeek: map['dayOfWeek'] as String,
-      startTime: map['startTime'] as String,
-      endTime: map['endTime'] as String,
-      room: map['room'] as String,
+      id: rawId is int ? rawId : null,
+      subject: map['subject'] ?? '',
+      teacher: map['teacher'] ?? '',
+      className: map['className'] ?? '',
+      academicYear: map['academicYear'] ?? '',
+      dayOfWeek: map['dayOfWeek'] ?? '',
+      startTime: map['startTime'] ?? '',
+      endTime: map['endTime'] ?? '',
+      room: map['room'] ?? '',
+      remoteId: rawId is String ? rawId : map['remote_id'],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      if (id != null) 'id': id,
       'subject': subject,
       'teacher': teacher,
       'className': className,
@@ -46,6 +50,7 @@ class TimetableEntry {
       'startTime': startTime,
       'endTime': endTime,
       'room': room,
+      'remote_id': remoteId,
     };
   }
 }

@@ -21,6 +21,9 @@ import 'package:school_manager/screens/dashboard_home.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:school_manager/services/database_service.dart';
 import 'package:school_manager/services/pdf_service.dart';
+import 'package:school_manager/services/api/remote_finance_service.dart';
+import 'package:school_manager/services/finance_sync_service.dart';
+import 'package:school_manager/services/sync_manager.dart';
 import 'package:open_file/open_file.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/utils/snackbar.dart';
@@ -46,6 +49,7 @@ class _PaymentsPageState extends State<PaymentsPage>
   Map<String, Student> _studentsById = {};
   Map<String, Class> _classesByName = {};
   bool _isLoading = true;
+  bool _syncing = false;
   int _currentPage = 0;
   static const int _rowsPerPage = 10;
   String? _selectedClassFilter;
@@ -145,9 +149,23 @@ class _PaymentsPageState extends State<PaymentsPage>
       by = user?.displayName ?? user?.username;
     } catch (_) {}
 
-    await _dbService.cancelPaymentWithReason(id, reason, by: by);
+    final updatedPayment = payment.copyWith(
+      isCancelled: true,
+      cancelReason: reason,
+      cancelBy: by,
+      cancelledAt: DateTime.now().toIso8601String(),
+    );
+
+    await _dbService.updatePayment(updatedPayment);
+    final syncRes = await FinanceSyncService.instance.upsertPayment(updatedPayment);
+
     if (popAfterSuccess != null) Navigator.of(popAfterSuccess).pop();
-    showSnackBar(context, 'Paiement annulé');
+
+    if (syncRes.usedOfflineFallback) {
+      showSnackBar(context, 'Paiement annulé localement (Mode Hors-ligne)');
+    } else {
+      showSnackBar(context, 'Paiement annulé et synchronisé');
+    }
     await _fetchPayments();
   }
 
@@ -189,16 +207,43 @@ class _PaymentsPageState extends State<PaymentsPage>
   Future<void> _fetchPayments() async {
     setState(() => _isLoading = true);
 
-    final payments = await _dbService.getAllPayments();
-    final students = await _dbService.getStudents();
-    final classes = await _dbService.getClasses();
-    final schoolInfo = await loadSchoolInfo();
-    final years = classes.map((c) => c.academicYear).toSet().toList()..sort();
-
     final currentAcademicYear = await getCurrentAcademicYear();
     final effectiveYear = _resolveEffectiveAcademicYear(
       fallback: currentAcademicYear,
     );
+
+    List<Payment> payments;
+    try {
+      final remoteData = await RemoteFinanceService.instance.listPayments(academicYear: effectiveYear);
+      final remotePayments = remoteData.map((m) => Payment.fromJson(m)).toList();
+      final localPayments = await _dbService.getAllPayments();
+      final remoteIds = remotePayments.map((p) => p.id).toSet();
+      
+      payments = [
+        ...remotePayments,
+        ...localPayments.where((p) => !remoteIds.contains(p.id))
+      ];
+    } catch (e) {
+      debugPrint('Remote fetch failed, falling back to local: $e');
+      payments = await _dbService.getAllPayments();
+      
+      // Inform the user about the offline fallback if it's a network error
+      if (mounted && (e.toString().contains('503') || e.toString().contains('SocketException'))) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Réseau indisponible. Utilisation des données locales.'),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+
+    final students = await _dbService.getStudents();
+    final classes = await _dbService.getClasses();
+    final schoolInfo = await loadSchoolInfo();
+    final years = classes.map((c) => c.academicYear).toSet().toList()..sort();
 
     // Load cancelled for the selected/effective year
     final cancelled = await _dbService.getCancelledPaymentsForYear(
@@ -1066,24 +1111,117 @@ class _PaymentsPageState extends State<PaymentsPage>
                   ),
                 ],
               ),
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
+              Row(
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  color: theme.iconTheme.color,
-                  size: 20,
-                ),
+                    child: IconButton(
+                      icon: _syncing
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.primary,
+                              ),
+                            )
+                          : Icon(
+                              Icons.sync,
+                              color: theme.colorScheme.primary,
+                              size: 20,
+                            ),
+                      tooltip: 'Synchroniser / Actualiser',
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      onPressed: _syncing
+                          ? null
+                          : () async {
+                              setState(() => _syncing = true);
+                              
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Synchronisation en cours...'),
+                                  duration: Duration(seconds: 1),
+                                ),
+                              );
+
+                              try {
+                                await SyncManager.instance.syncAll();
+                                await _fetchPayments();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          Icon(Icons.check_circle, color: Colors.white),
+                                          SizedBox(width: 8),
+                                          Text('Synchronisation terminée', style: TextStyle(color: Colors.white)),
+                                        ],
+                                      ),
+                                      backgroundColor: Colors.green,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Row(
+                                        children: [
+                                          Icon(Icons.cloud_off, color: Colors.white),
+                                          SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              'Erreur de synchronisation : $e',
+                                              style: TextStyle(color: Colors.white),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      backgroundColor: Colors.redAccent,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                if (mounted) setState(() => _syncing = false);
+                              }
+                            },
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.notifications_outlined,
+                      color: theme.iconTheme.color,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1393,6 +1531,7 @@ class _PaymentsPageState extends State<PaymentsPage>
                             ),
                           ),
                         ),
+
                         ElevatedButton.icon(
                           onPressed: showCancelledTab
                               ? null
@@ -2176,13 +2315,38 @@ class _PaymentsPageState extends State<PaymentsPage>
                   : null,
               recordedBy: user?.displayName ?? user?.username,
             );
-            await _dbService.insertPayment(payment);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Paiement enregistré avec succès'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            final inserted = await _dbService.insertPayment(payment);
+            final syncRes = await FinanceSyncService.instance.upsertPayment(inserted);
+            
+            if (syncRes.usedOfflineFallback) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(Icons.cloud_off, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text('Enregistré localement (Mode Hors-ligne)'),
+                    ],
+                  ),
+                  backgroundColor: Colors.orange,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text('Paiement enregistré et synchronisé'),
+                    ],
+                  ),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
             Navigator.of(context).pop();
             _fetchPayments();
           } catch (e) {
@@ -2227,13 +2391,38 @@ class _PaymentsPageState extends State<PaymentsPage>
                       : null,
                   recordedBy: user?.displayName ?? user?.username,
                 );
-                await _dbService.insertPayment(payment);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Paiement enregistré avec succès'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
+                final inserted = await _dbService.insertPayment(payment);
+                final syncRes = await FinanceSyncService.instance.upsertPayment(inserted);
+
+                if (syncRes.usedOfflineFallback) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.cloud_off, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text('Enregistré localement (Mode Hors-ligne)'),
+                        ],
+                      ),
+                      backgroundColor: Colors.orange,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text('Paiement enregistré et synchronisé'),
+                        ],
+                      ),
+                      backgroundColor: Colors.green,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
                 Navigator.of(context).pop();
                 _fetchPayments();
               } catch (e) {

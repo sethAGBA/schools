@@ -31,6 +31,11 @@ import 'package:school_manager/utils/snackbar.dart';
 import 'package:school_manager/screens/statistics_modal.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'dart:ui' as ui;
+import 'package:school_manager/services/api/remote_academics_service.dart';
+import 'package:school_manager/services/academics_sync_service.dart';
+import 'package:school_manager/services/api/token_storage_service.dart';
+import 'package:school_manager/services/api/remote_students_service.dart';
+import 'package:school_manager/widgets/notification_center.dart';
 
 // Import/Export helpers (top-level)
 class _ImportPreview {
@@ -69,7 +74,8 @@ class AppColors {
 final schoolLevelNotifier = ValueNotifier<String>('');
 
 class GradesPage extends StatefulWidget {
-  const GradesPage({Key? key}) : super(key: key);
+  final Function(int)? onNavigate;
+  const GradesPage({this.onNavigate, Key? key}) : super(key: key);
 
   @override
   _GradesPageState createState() => _GradesPageState();
@@ -97,6 +103,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
   final int _archiveItemsPerPage = 10;
   String _adminCivility = 'M.';
   bool _searchAllYears = false;
+  bool _syncing = false;
   // Ensure we only auto-save default subject appreciations once per subject per build context
   final Set<String> _initialSubjectAppSave = {};
   // Empêche les rechargements multiples des synthèses déjà chargées
@@ -337,6 +344,12 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         appreciation: app,
         moyenneClasse: mc,
         coefficient: coeff,
+      );
+
+      _syncGradeToRemote(
+        studentId: studentId,
+        subjectName: subject,
+        period: term,
       );
     });
   }
@@ -1662,6 +1675,21 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
   Future<void> _loadAllData() async {
     setState(() => isLoading = true);
+    
+    // Try remote first for classes
+    try {
+      final remoteClasses = await RemoteAcademicsService.instance.listClasses(
+        academicYear: selectedAcademicYear ?? academicYearNotifier.value,
+      );
+      if (remoteClasses.isNotEmpty) {
+        // Map API response to local Class model if necessary, or just use as is if they are compatible
+        // For now, let's stick to local DB but we should ideally sync them.
+        // Actually, let's keep local DB as the source of truth for the UI but try to sync it.
+      }
+    } catch (e) {
+      debugPrint('[GradesPage] Remote classes load failed: $e');
+    }
+
     final currentUser = await AuthService.instance.getCurrentUser();
     students = await _dbService.getStudents();
     classes = await _dbService.getClasses();
@@ -2014,7 +2042,95 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       _gradeDrafts[student.id] = note.toString();
     }
     if (mounted) setState(() {});
+    
+    _syncGradeToRemote(
+      studentId: student.id,
+      subjectName: selectedSubject!,
+      period: selectedTerm!,
+    );
   }
+
+  Future<void> _syncGradeToRemote({
+    required String studentId,
+    required String subjectName,
+    required String period,
+  }) async {
+    try {
+      final className = selectedClass ?? '';
+      final academicYear = selectedAcademicYear ?? academicYearNotifier.value;
+      
+      final allGrades = await _dbService.getGradesForStudent(
+        studentId: studentId,
+        className: className,
+        academicYear: academicYear,
+        term: period,
+      );
+      
+      final subjectGrades = allGrades.where((g) => g.subject == subjectName).toList();
+      if (subjectGrades.isEmpty) return;
+
+      final devoirs = subjectGrades.where((g) => g.type == 'Devoir').toList();
+      double? devoirAvg;
+      if (devoirs.isNotEmpty) {
+        double total = 0, coeffs = 0;
+        for (final g in devoirs) {
+          total += (g.value / g.maxValue * 20) * g.coefficient;
+          coeffs += g.coefficient;
+        }
+        devoirAvg = coeffs > 0 ? total / coeffs : 0;
+      }
+
+      final compositions = subjectGrades.where((g) => g.type == 'Composition').toList();
+      double? compoNote;
+      if (compositions.isNotEmpty) {
+        double total = 0, coeffs = 0;
+        for (final g in compositions) {
+          total += (g.value / g.maxValue * 20) * g.coefficient;
+          coeffs += g.coefficient;
+        }
+        compoNote = coeffs > 0 ? total / coeffs : 0;
+      }
+
+      final appData = await _dbService.getSubjectAppreciation(
+        studentId: studentId,
+        className: className,
+        academicYear: academicYear,
+        subject: subjectName,
+        term: period,
+      );
+
+      final String? comment = appData?['appreciation'];
+      final String? classAvgStr = appData?['moyenne_classe'];
+      final double? classAvg = double.tryParse(classAvgStr?.replaceAll(',', '.') ?? '');
+
+      double total = 0, coeffs = 0;
+      for (final g in subjectGrades) {
+        total += (g.value / g.maxValue * 20) * g.coefficient;
+        coeffs += g.coefficient;
+      }
+      final double? subjectAvg = coeffs > 0 ? total / coeffs : null;
+
+      final course = subjects.firstWhere((c) => c.name == subjectName, orElse: () => Course.empty());
+      if (course.id.isEmpty || !course.id.contains('-')) {
+        debugPrint('[GradesPage] Skipping sync: subjectId is not a GUID: ${course.id}');
+        return;
+      }
+
+      await AcademicsSyncService.instance.upsertGrade(
+        studentId: studentId,
+        subjectId: course.id,
+        period: period,
+        devoirNote: devoirAvg,
+        compositionNote: compoNote,
+        average: subjectAvg,
+        teacherComment: comment,
+        classAverage: classAvg,
+      );
+    } catch (e) {
+      debugPrint('[GradesPage] Error in _syncGradeToRemote: $e');
+    }
+  }
+
 
   ThemeData _buildLightTheme() {
     return ThemeData(
@@ -2174,27 +2290,39 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
               ),
               Row(
                 children: [
+                  IconButton(
+                    tooltip: 'Synchroniser / Actualiser',
+                    onPressed: _syncing
+                        ? null
+                        : () async {
+                            setState(() => _syncing = true);
+                            try {
+                              final r = await AcademicsSyncService.instance.syncPending();
+                              await _loadAllData();
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Sync: ${r.succeeded}/${r.processed} OK, ${r.failed} échec(s)',
+                                  ),
+                                ),
+                              );
+                            } finally {
+                              if (mounted) setState(() => _syncing = false);
+                            }
+                          },
+                    icon: _syncing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(Icons.sync, color: theme.primaryColor),
+                  ),
+                  const SizedBox(width: 8),
                   _buildQuickActions(),
                   SizedBox(width: 16),
-                  Container(
-                    padding: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.notifications_outlined,
-                      color: theme.iconTheme.color,
-                      size: 20,
-                    ),
-                  ),
+                  NotificationBell(onNavigate: widget.onNavigate),
                 ],
               ),
             ],

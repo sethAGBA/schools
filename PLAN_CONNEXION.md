@@ -16,7 +16,7 @@ et le backend .NET, et planifie les prochaines étapes module par module.
 | Tenancy (multitenant) | ✅ Complet | Isolation via `X-Tenant-Id` |
 | Audit | ✅ Complet | Journal immuable des actions sensibles |
 | Students (CRUD API) | ✅ Complet | Endpoints list, create, update, delete |
-| Academics | 🔴 Squelette vide | Entités et controllers à implémenter |
+| Academics | ✅ Complet | Classes, Subjects, Grades (consolidés) |
 | Finance | 🔴 Squelette vide | Entités et controllers à implémenter |
 | Reporting | 🔴 Squelette vide | À implémenter |
 | Documents | 🔴 Squelette vide | À implémenter |
@@ -31,12 +31,12 @@ et le backend .NET, et planifie les prochaines étapes module par module.
 | `StudentsSyncService` | ✅ Complet | API-first + offline fallback + pending_sync |
 | `StudentsPage` | ✅ Complet | Chargement API + fallback SQLite |
 | Import CSV/Excel élèves | ✅ Corrigé | Passe via `StudentsSyncService` |
-| `GradesPage` (notes) | 🔴 SQLite direct | À connecter |
-| `PaymentsPage` (paiements) | 🔴 SQLite direct | À connecter |
-| `StaffPage` (personnel) | 🔴 SQLite direct | À connecter |
-| `DisciplinePage` | 🔴 SQLite direct | À connecter |
-| `TimetablePage` | 🔴 SQLite direct | À connecter |
-| `SyncManager` global | 🔴 Absent | À créer |
+| `GradesPage` (notes) | ✅ Complet | Connexion `AcademicsSyncService` active |
+| `PaymentsPage` (paiements) | ✅ Complet | `FinanceSyncService` actif |
+| `StaffPage` (personnel) | ✅ Complet | `StaffSyncService` actif |
+| `DisciplinePage` | ✅ Complet | `DisciplineSyncService` actif |
+| `TimetablePage` | ✅ Complet | `TimetableSyncService` actif |
+| `SyncManager` global | ✅ Complet | `SyncManager.instance.syncAll()` |
 
 ---
 
@@ -195,13 +195,69 @@ Chaque connexion Flutter → API suit ce schéma :
 |---|---|---|
 | Infra backend sécurisée | Auth, JWT, RBAC, Audit, Déploiement docs | ✅ 100% |
 | Students connecté Flutter | API + offline + sync | ✅ 100% |
-| Academics backend | Entités + migrations + controllers | 🔴 0% |
-| GradesPage Flutter | Connexion API + sync service | 🔴 0% |
-| Finance backend | Entités + migrations + controllers | 🔴 0% |
-| PaymentsPage Flutter | Connexion API + sync service | 🔴 0% |
-| Modules restants Flutter | Staff, Discipline, Timetable | 🔴 0% |
-| SyncManager global | Badge + retry auto | 🔴 0% |
+| Academics backend | Entités + migrations + controllers | ✅ 100% |
+| GradesPage Flutter | Connexion API + sync service | ✅ 100% |
+| Finance backend | Entités + migrations + controllers | ✅ 90% (Expenses à finir) |
+| PaymentsPage Flutter | Connexion API + sync service | ✅ 100% |
+| Discipline backend | Entités + migrations + controllers | ✅ 100% |
+| DisciplinePage Flutter | Connexion API + sync service | ✅ 100% |
+| Modules restants Flutter | Staff, Discipline, Timetable | ✅ 100% |
+| SyncManager global | Badge + retry auto | ✅ 100% |
+| Bibliothèque | Backend + Sync Flutter | 🔴 0% |
+| Statistiques & Rapports | Endpoints agrégation + Flutter | 🔴 0% |
+| Configurations | Settings, Categories, Signatures | 🔴 0% |
+| Dashboard | Endpoint summary + UI | 🔴 0% |
+| Examens Blancs | Backend Academics + Sync Flutter | 🔴 0% |
+| Utilisateurs | Auth RBAC + Sync Flutter | 🔴 0% |
+| Matières & Classes | UI configuration + Sync | 🔴 0% |
+| Audit | Envoi logs au serveur | 🔴 0% |
 | Déploiement VPS | Prod en ligne | 🔴 0% |
+
+---
+
+## 📌 Écrans et Modules Restant à Connecter (Mode Local Actuel)
+
+Bien que la majorité des modules principaux soient connectés à l'API, les écrans suivants fonctionnent encore exclusivement en mode hors-ligne (SQLite local) et nécessitent la mise en place d'une synchronisation hybride.
+
+### 1. 📚 La Bibliothèque (`library/`)
+* **État :** Totalement hors ligne (Squelette backend vide).
+* **Travail requis :**
+  * **Backend :** Créer les entités (`Book`, `Borrowing`), les migrations et les contrôleurs API `/api/library`.
+  * **Flutter :** Créer `RemoteLibraryService`, `LibrarySyncService`, et implémenter la logique de fusion (Merge) dans les écrans de la bibliothèque.
+
+### 2. 📊 Les Statistiques et Rapports (`statistiques/` et Reporting)
+* **État :** Totalement calculé en local par l'application Flutter. Backend (Reporting) à l'état de squelette vide.
+* **Travail requis :** 
+  * **Backend :** Déplacer la logique de calcul lourd vers le serveur et créer des endpoints d'agrégation.
+  * **Flutter :** Consommer les endpoints via l'API avec un fallback local pour l'affichage en mode déconnecté.
+
+### 3. ⚙️ Les Paramètres et Configurations de l'Établissement
+* **État :** Enregistrement exclusivement local.
+* **Écrans concernés :**
+  * `settings_page.dart` : Paramètres globaux (nom, logo, adresses de l'établissement).
+  * `signatures_page.dart` : Signatures et cachets de l'établissement.
+  * `categories_page.dart` : Catégories (dépenses, matériels).
+* **Travail requis :** Créer une logique de synchronisation pour `SchoolInfo`, `Signatures` et `Categories`.
+
+### 4. 📝 L'Écran Dashboard (`dashboard_home.dart`)
+* **État :** Totalement local.
+* **Travail requis :** Les widgets d'informations (statistiques, graphiques rapides, absences récentes) lisent actuellement la base de données locale. Le Dashboard devra interroger un nouveau endpoint `/api/dashboard/summary` du backend pour agréger et consolider toutes les données d'un seul coup au démarrage (plus performant que de tout charger séparément).
+
+### 5. 🎓 Examens Blancs (Mock Exams)
+* **État :** Totalement local.
+* **Travail requis :** Les examens blancs nécessitent de brancher les entités dédiées sur le module Academics du backend (`MockExam`, `MockExamGrade`) et de créer le service `RemoteMockExamService` pour synchroniser ces évaluations spécifiques avec l'API.
+
+### 6. 📚 Matières et Classes (`subjects_page.dart`)
+* **État :** Paramétrage local exclusif (bien que le CRUD des classes existe sur l'API, les écrans de création de la hiérarchie Classes/Matières dépendent majoritairement de SQLite).
+* **Travail requis :** Connecter l'écran `subjects_page.dart` et d'édition de classes avec les endpoints existants (`AcademicsSyncService.syncPending()`) pour s'assurer que l'arbre académique (Classes → Matières → Coefficients) est synchronisé.
+
+### 7. 🔐 Utilisateurs et Sécurité (`users_management_page.dart`)
+* **État :** Totalement local. La gestion locale des rôles et l'authentification 2FA hors-ligne ont été réalisées, mais le rattachement avec le backend (utilisateurs de l'API / RBAC PostgreSQL) n'est pas fait.
+* **Travail requis :** Mettre en place un service `RemoteUsersService` pour synchroniser (ou piloter directement) le module Auth du backend (création de comptes, assignation des rôles Cloud).
+
+### 8. 🕵️‍♂️ Registre d'Audit (`audit_page.dart`)
+* **État :** Totalement local. Les logs d'audit sont sauvegardés et affichés depuis SQLite.
+* **Travail requis :** Le backend possède déjà un journal immuable. Il faut créer un `RemoteAuditService` pour envoyer les actions critiques (connexions, exports, suppressions) de l'application vers la table d'audit du backend.
 
 ---
 
