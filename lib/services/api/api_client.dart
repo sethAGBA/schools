@@ -44,7 +44,7 @@ class ApiClient {
 
   Future<http.Response> post(
     String path, {
-    Map<String, dynamic>? body,
+    Object? body,
     bool withAuth = true,
   }) async {
     final encoded = jsonEncode(body ?? <String, dynamic>{});
@@ -57,7 +57,7 @@ class ApiClient {
 
   Future<http.Response> put(
     String path, {
-    Map<String, dynamic>? body,
+    Object? body,
     bool withAuth = true,
   }) async {
     final encoded = jsonEncode(body ?? <String, dynamic>{});

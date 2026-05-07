@@ -32,6 +32,7 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
     public DbSet<TimetableEntry> TimetableEntries => Set<TimetableEntry>();
     public DbSet<SchoolSettings> SchoolSettings => Set<SchoolSettings>();
     public DbSet<SubjectCategory> SubjectCategories => Set<SubjectCategory>();
+    public DbSet<MockExamSession> MockExamSessions => Set<MockExamSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -203,6 +204,7 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
             entity.Property(x => x.Average).HasColumnName("average");
             entity.Property(x => x.TeacherComment).HasColumnName("teacher_comment").HasMaxLength(1000);
             entity.Property(x => x.ClassAverage).HasColumnName("class_average");
+            entity.Property(x => x.Type).HasColumnName("type").HasMaxLength(50).HasDefaultValue("Devoir");
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
 
@@ -403,6 +405,21 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
             entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
             entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
         });
+
+        modelBuilder.Entity<MockExamSession>(entity =>
+        {
+            entity.ToTable("mock_exam_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id").HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(150).IsRequired();
+            entity.Property(x => x.OrderIndex).HasColumnName("order_index").IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
+        });
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -540,6 +557,19 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
         }
 
         foreach (var entry in ChangeTracker.Entries<SubjectCategory>())
+        {
+            if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
+            {
+                entry.Entity.TenantId = tenantId;
+            }
+
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                entry.Entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<MockExamSession>())
         {
             if (entry.State == EntityState.Added && string.IsNullOrWhiteSpace(entry.Entity.TenantId))
             {

@@ -13,6 +13,7 @@ import 'package:school_manager/services/license_service.dart';
 import 'package:school_manager/screens/students/student_profile_page.dart';
 import 'package:school_manager/services/notification_service.dart';
 import 'package:school_manager/widgets/notification_center.dart';
+import 'package:school_manager/services/sync_manager.dart';
 
 ValueNotifier<String> academicYearNotifier = ValueNotifier<String>('2024-2025');
 
@@ -70,8 +71,17 @@ class _DashboardHomeState extends State<DashboardHome>
     _controller.forward();
     refreshAcademicYear();
     academicYearNotifier.addListener(_onYearChanged);
+    SyncManager.instance.addListener(_onSyncStatusChanged);
     _loadTodos();
     _loadDashboardData();
+  }
+
+  void _onSyncStatusChanged() {
+    if (!SyncManager.instance.isSyncing) {
+      _loadDashboardData();
+    } else {
+      if (mounted) setState(() {});
+    }
   }
 
   void _onYearChanged() {
@@ -503,6 +513,7 @@ class _DashboardHomeState extends State<DashboardHome>
   @override
   void dispose() {
     academicYearNotifier.removeListener(_onYearChanged);
+    SyncManager.instance.removeListener(_onSyncStatusChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -638,25 +649,27 @@ class _DashboardHomeState extends State<DashboardHome>
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Actualiser les données',
-                              onPressed: _isLoading ? null : () async {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Actualisation du tableau de bord...'),
-                                    duration: Duration(seconds: 1),
-                                  ),
-                                );
-                                await _loadDashboardData();
-                                if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Tableau de bord à jour ✅'),
-                                      backgroundColor: Color(0xFF10B981),
-                                    ),
-                                  );
-                                }
-                              },
-                              icon: _isLoading
+                              tooltip: 'Synchronisation globale',
+                              onPressed: (_isLoading || SyncManager.instance.isSyncing)
+                                  ? null
+                                  : () async {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Lancement de la synchronisation globale...'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                      await SyncManager.instance.syncAll();
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Synchronisation terminée ✅'),
+                                            backgroundColor: Color(0xFF10B981),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              icon: (_isLoading || SyncManager.instance.isSyncing)
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,

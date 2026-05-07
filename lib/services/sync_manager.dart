@@ -5,11 +5,12 @@ import 'package:school_manager/services/finance_sync_service.dart';
 import 'package:school_manager/services/staff_sync_service.dart';
 import 'package:school_manager/services/discipline_sync_service.dart';
 import 'package:school_manager/services/timetable_sync_service.dart';
+import 'package:school_manager/services/mock_exams_sync_service.dart';
 import 'package:school_manager/services/expense_sync_service.dart';
 import 'package:school_manager/services/settings_sync_service.dart';
 import 'package:school_manager/services/categories_sync_service.dart';
 
-class SyncManager {
+class SyncManager extends ChangeNotifier {
   SyncManager._internal();
   static final SyncManager instance = SyncManager._internal();
 
@@ -19,6 +20,7 @@ class SyncManager {
   Future<void> syncAll() async {
     if (_isSyncing) return;
     _isSyncing = true;
+    notifyListeners();
     debugPrint('[SyncManager] Starting global sync...');
 
     try {
@@ -29,6 +31,7 @@ class SyncManager {
         StaffSyncService.instance.syncPending(),
         DisciplineSyncService.instance.syncPending(),
         TimetableSyncService.instance.syncPending(),
+        MockExamsSyncService.instance.syncPending(),
         ExpenseSyncService.instance.syncPending(),
         SettingsSyncService.instance.syncPending(),
         CategoriesSyncService.instance.syncPending(),
@@ -38,6 +41,7 @@ class SyncManager {
       debugPrint('[SyncManager] Global sync failed: $e');
     } finally {
       _isSyncing = false;
+      notifyListeners();
     }
   }
 }

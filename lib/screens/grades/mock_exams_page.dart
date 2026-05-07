@@ -10,7 +10,9 @@ import 'package:school_manager/services/auth_service.dart';
 import 'package:school_manager/services/safe_mode_service.dart';
 import 'package:school_manager/screens/dashboard_home.dart';
 import 'package:school_manager/services/pdf_service.dart';
+import 'package:school_manager/services/mock_exams_sync_service.dart';
 import 'package:school_manager/services/mock_exam_pdf_service.dart';
+import 'package:school_manager/services/api/remote_mock_exams_service.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:printing/printing.dart';
 import 'dart:async';
@@ -69,11 +71,13 @@ class _MockExamsPageState extends State<MockExamsPage> {
     selectedAcademicYear = academicYearNotifier.value;
     _loadAllData();
     academicYearNotifier.addListener(_onAcademicYearChanged);
+    MockExamsSyncService.instance.addListener(_onSyncStatusChanged);
   }
 
   @override
   void dispose() {
     academicYearNotifier.removeListener(_onAcademicYearChanged);
+    MockExamsSyncService.instance.removeListener(_onSyncStatusChanged);
     for (final timer in _gradeDebouncers.values) {
       timer.cancel();
     }
@@ -94,11 +98,17 @@ class _MockExamsPageState extends State<MockExamsPage> {
     }
   }
 
-  Future<void> _loadAllData() async {
+  void _onSyncStatusChanged() {
+    if (mounted) {
+      _loadAllData(forceLocal: true); // Refresh UI from local DB after sync
+    }
+  }
+
+  Future<void> _loadAllData({bool forceLocal = false}) async {
     setState(() => isLoading = true);
     classes = await _dbService.getClasses();
     
-    sessions = await _dbService.getMockExamSessions();
+    sessions = await MockExamsSyncService.instance.loadSessions(forceRemote: !forceLocal && sessions.isEmpty);
     if (sessions.isNotEmpty && (selectedSession == null || !sessions.contains(selectedSession))) {
       selectedSession = sessions.first;
     }
@@ -231,6 +241,14 @@ class _MockExamsPageState extends State<MockExamsPage> {
       type: 'Examen Blanc',
       coefficient: _subjectCoefficients[course.id] ?? 1.0,
       maxValue: 20.0,
+    );
+
+    // Hybrid save
+    await MockExamsSyncService.instance.saveGrade(
+      studentId: student.id,
+      subjectId: course.id,
+      session: selectedSession!,
+      value: note,
     );
 
     if (existing == null) {
@@ -368,9 +386,51 @@ class _MockExamsPageState extends State<MockExamsPage> {
                     tooltip: isGridView ? 'Vue par matière' : 'Vue grille globale',
                   ),
                   IconButton(
+                    icon: Icon(Icons.sync, color: theme.colorScheme.primary),
+                    onPressed: () => MockExamsSyncService.instance.syncAll(),
+                    tooltip: 'Synchroniser avec le cloud',
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (MockExamsSyncService.instance.isSyncing)
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
+                          )
+                        else
+                          Icon(
+                            MockExamsSyncService.instance.dataSource.contains('Cloud') 
+                                ? Icons.cloud_done_outlined 
+                                : Icons.storage_outlined,
+                            size: 14,
+                            color: theme.colorScheme.primary,
+                          ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Source : ${MockExamsSyncService.instance.dataSource}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
                     icon: Icon(Icons.refresh, color: theme.colorScheme.primary),
-                    onPressed: _loadAllData,
-                    tooltip: 'Actualiser',
+                    onPressed: () => _loadAllData(forceLocal: true),
+                    tooltip: 'Rafraîchir localement',
                   ),
                   const SizedBox(width: 4),
                   _buildExcelActionsMenu(theme),
@@ -688,7 +748,12 @@ class _MockExamsPageState extends State<MockExamsPage> {
                                         showSnackBar(context, 'Impossible de supprimer cette session car des notes y sont associées.', isError: true);
                                       } else {
                                         await _dbService.deleteMockExamSession(session);
-                                        final freshList = await _dbService.getMockExamSessions();
+                                        // Optional: notify cloud of deletion if desired
+                                        try {
+                                          await RemoteMockExamsService.instance.deleteSession(session);
+                                        } catch (_) {}
+                                        
+                                        final freshList = await MockExamsSyncService.instance.loadSessions(forceRemote: false);
                                         setDialogState(() => sessions = freshList);
                                         setState(() {
                                           this.sessions = freshList;
@@ -761,7 +826,9 @@ class _MockExamsPageState extends State<MockExamsPage> {
                 final text = controller.text.trim();
                 if (text.isNotEmpty) {
                   await _dbService.addMockExamSession(text);
-                  final freshList = await _dbService.getMockExamSessions();
+                  await MockExamsSyncService.instance.saveSession(text);
+                  
+                  final freshList = await MockExamsSyncService.instance.loadSessions(forceRemote: false);
                   setDialogState(() => sessions = freshList);
                   setState(() {
                     this.sessions = freshList;

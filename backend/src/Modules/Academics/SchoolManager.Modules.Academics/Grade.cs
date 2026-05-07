@@ -14,6 +14,7 @@ public sealed class Grade : ITenantEntity
     public double? Average { get; set; }
     public string? TeacherComment { get; set; }
     public double? ClassAverage { get; set; }
+    public string Type { get; set; } = "Devoir"; // e.g., "Devoir", "Composition", "Examen Blanc"
 
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

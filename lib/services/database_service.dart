@@ -912,6 +912,11 @@ class DatabaseService {
     return maps.map((map) => map['name'] as String).toList();
   }
 
+  Future<void> clearMockExamSessions() async {
+    final db = await database;
+    await db.delete('mock_exam_sessions');
+  }
+
   Future<void> addMockExamSession(String name) async {
     final db = await database;
     final count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM mock_exam_sessions'));
