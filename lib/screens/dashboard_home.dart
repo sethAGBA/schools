@@ -637,7 +637,37 @@ class _DashboardHomeState extends State<DashboardHome>
                                 ],
                               ),
                             ),
-                            SizedBox(width: 16),
+                            IconButton(
+                              tooltip: 'Actualiser les données',
+                              onPressed: _isLoading ? null : () async {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Actualisation du tableau de bord...'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                                await _loadDashboardData();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Tableau de bord à jour ✅'),
+                                      backgroundColor: Color(0xFF10B981),
+                                    ),
+                                  );
+                                }
+                              },
+                              icon: _isLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : Icon(
+                                      Icons.sync,
+                                      color: theme.iconTheme.color,
+                                      size: 24,
+                                    ),
+                            ),
                             NotificationBell(onNavigate: widget.onNavigate),
                           ],
                         ),

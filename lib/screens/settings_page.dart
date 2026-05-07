@@ -14,6 +14,8 @@ import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:school_manager/services/database_service.dart';
 import 'package:school_manager/services/license_service.dart';
 import 'package:school_manager/services/pdf_service.dart';
+import 'package:school_manager/services/settings_sync_service.dart';
+import 'package:school_manager/services/api/token_storage_service.dart';
 
 import 'package:school_manager/models/student.dart';
 import 'package:school_manager/models/class.dart';
@@ -21,6 +23,7 @@ import 'package:school_manager/models/payment.dart';
 import 'package:school_manager/models/school_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:school_manager/widgets/notification_center.dart';
 
 
 class SettingsPage extends StatefulWidget {
@@ -100,6 +103,8 @@ class _SettingsPageState extends State<SettingsPage>
   String _adminCivilityCollege = 'M.';
   String _adminCivilityLycee = 'M.';
   String _adminCivilityUniversity = 'M.';
+  bool _isFromRemote = false;
+  bool _isSyncing = false;
 
   final List<String> _languages = ['Français', 'English', 'العربية', 'Español'];
   final List<String> _civilites = ['M.', 'Mme', 'Dr.', 'Révérend', 'RP.'];
@@ -154,7 +159,9 @@ class _SettingsPageState extends State<SettingsPage>
     _sloganFocusNode = FocusNode();
     _registrationFeesFocusNode = FocusNode();
 
-    _loadSchoolSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSchoolSettings();
+    });
     _academicYearController.text = _academicYear;
     _loadAvailableYears();
   }
@@ -212,66 +219,84 @@ class _SettingsPageState extends State<SettingsPage>
     super.dispose();
   }
 
-  Future<void> _loadSchoolSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _etablissementController.text = prefs.getString('school_name') ?? '';
-      _adresseController.text = prefs.getString('school_address') ?? '';
-      _bpController.text = prefs.getString('school_bp') ?? '';
-      _telephoneController.text = prefs.getString('school_phone') ?? '';
-      _emailController.text = prefs.getString('school_email') ?? '';
-      _siteWebController.text = prefs.getString('school_website') ?? '';
-      _mottoController.text = prefs.getString('school_motto') ?? '';
-      _directeurController.text = prefs.getString('school_director') ?? '';
-      _directeurPrimaireController.text =
-          prefs.getString('school_director_primary') ?? '';
-      _directeurCollegeController.text =
-          prefs.getString('school_director_college') ?? '';
-      _directeurLyceeController.text =
-          prefs.getString('school_director_lycee') ?? '';
-      _directeurUniversityController.text =
-          prefs.getString('school_director_university') ?? '';
-      _codeEtablissementController.text = prefs.getString('school_code') ?? '';
-      _niveauScolaireController.text =
-          prefs.getString('school_level') ?? 'Primaire';
-      _ministryController.text = prefs.getString('school_ministry') ?? '';
-      _republicMottoController.text =
-          prefs.getString('school_republic_motto') ?? '';
-      _republicController.text = prefs.getString('school_republic') ?? '';
-      _educationDirectionController.text =
-          prefs.getString('school_education_direction') ?? '';
-      _inspectionController.text = prefs.getString('school_inspection') ?? '';
-      _reportFooterController.text =
-          prefs.getString('report_card_footer_note') ?? '';
-      _sloganController.text =
-          prefs.getString('school_slogan') ??
-          PdfService.defaultReportFooterNote;
-      _registrationFeesController.text =
-          prefs.getDouble('school_registration_fees')?.toString() ?? '0';
-      _logoPath = prefs.getString('school_logo');
-      _flagPath = prefs.getString('school_flag');
-      _isDarkMode = prefs.getBool('dark_mode') ?? false;
-      _notificationsEnabled = prefs.getBool('notifications') ?? true;
-      _biometricEnabled = prefs.getBool('biometric') ?? false;
-      _selectedLanguage = prefs.getString('language') ?? 'Français';
-      _academicYear = prefs.getString('academic_year') ?? '2024-2025';
-      _academicYearController.text = _academicYear;
+  Future<void> _loadSchoolSettings({bool forceRemote = false}) async {
+    if (forceRemote && mounted) {
+      _showModernSnackBar('Synchronisation des paramètres en cours...');
+    }
+    setState(() => _isSyncing = true);
+    try {
+      final result = await SettingsSyncService.instance.loadSettings(forceRemote: forceRemote);
+      final settings = result.settings;
+      
+      setState(() {
+        _isFromRemote = result.fromRemote;
+        _etablissementController.text = settings['school_name'] ?? '';
+        _adresseController.text = settings['school_address'] ?? '';
+        _bpController.text = settings['school_bp'] ?? '';
+        _telephoneController.text = settings['school_phone'] ?? '';
+        _emailController.text = settings['school_email'] ?? '';
+        _siteWebController.text = settings['school_website'] ?? '';
+        _mottoController.text = settings['school_motto'] ?? '';
+        _directeurController.text = settings['school_director'] ?? '';
+        _directeurPrimaireController.text = settings['school_director_primary'] ?? '';
+        _directeurCollegeController.text = settings['school_director_college'] ?? '';
+        _directeurLyceeController.text = settings['school_director_lycee'] ?? '';
+        _directeurUniversityController.text = settings['school_director_university'] ?? '';
+        _codeEtablissementController.text = settings['school_code'] ?? '';
+        _niveauScolaireController.text = settings['school_level'] ?? 'Primaire';
+        _ministryController.text = settings['school_ministry'] ?? '';
+        _republicMottoController.text = settings['school_republic_motto'] ?? '';
+        _republicController.text = settings['school_republic'] ?? '';
+        _educationDirectionController.text = settings['school_education_direction'] ?? '';
+        _inspectionController.text = settings['school_inspection'] ?? '';
+        _reportFooterController.text = settings['report_card_footer_note'] ?? '';
+        _sloganController.text = settings['school_slogan'] ?? PdfService.defaultReportFooterNote;
+        
+        final fees = settings['school_registration_fees'];
+        _registrationFeesController.text = fees ?? '0';
+        
+        final prefs = SharedPreferences.getInstance();
+        // These are local-only UI settings usually
+        prefs.then((p) {
+          setState(() {
+            _logoPath = p.getString('school_logo');
+            _flagPath = p.getString('school_flag');
+            _isDarkMode = p.getBool('dark_mode') ?? false;
+            _notificationsEnabled = p.getBool('notifications') ?? true;
+            _biometricEnabled = p.getBool('biometric') ?? false;
+            _selectedLanguage = p.getString('language') ?? 'Français';
+          });
+        });
 
-      // Load civilities with migration logic
-      String fixCiv(String? val) => (val == 'RP' ? 'RP.' : (val ?? 'M.'));
+        _academicYear = settings['academic_year'] ?? '2024-2025';
+        _academicYearController.text = _academicYear;
 
-      _adminCivility = fixCiv(prefs.getString('school_admin_civility'));
-      _adminCivilityPrimary = fixCiv(
-        prefs.getString('school_civility_primary'),
-      );
-      _adminCivilityCollege = fixCiv(
-        prefs.getString('school_civility_college'),
-      );
-      _adminCivilityLycee = fixCiv(prefs.getString('school_civility_lycee'));
-      _adminCivilityUniversity = fixCiv(
-        prefs.getString('school_civility_university'),
-      );
-    });
+        String fixCiv(String? val) => (val == 'RP' ? 'RP.' : (val ?? 'M.'));
+        _adminCivility = fixCiv(settings['school_admin_civility']);
+        _adminCivilityPrimary = fixCiv(settings['school_civility_primary']);
+        _adminCivilityCollege = fixCiv(settings['school_civility_college']);
+        _adminCivilityLycee = fixCiv(settings['school_civility_lycee']);
+        _adminCivilityUniversity = fixCiv(settings['school_civility_university']);
+      });
+    } catch (e) {
+      if (mounted) {
+        _showModernSnackBar(
+          'Erreur lors du chargement : ${e.toString().contains('503') ? 'Serveur indisponible' : 'Vérifiez votre connexion'}',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+        if (forceRemote) {
+          if (!_isFromRemote) {
+             _showModernSnackBar('Paramètres chargés depuis le stockage local 💾');
+          } else {
+             _showModernSnackBar('Paramètres synchronisés avec le Cloud ☁️');
+          }
+        }
+      }
+    }
   }
 
   Future<void> _loadAvailableYears() async {
@@ -288,124 +313,105 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Future<void> _saveSchoolSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('school_name', _etablissementController.text.trim());
-    await prefs.setDouble(
-      'school_registration_fees',
-      double.tryParse(_registrationFeesController.text) ?? 0.0,
-    );
-    await prefs.setString('school_address', _adresseController.text.trim());
-    await prefs.setString('school_bp', _bpController.text.trim());
-    await prefs.setString('school_phone', _telephoneController.text.trim());
-    await prefs.setString('school_email', _emailController.text.trim());
-    await prefs.setString('school_website', _siteWebController.text.trim());
-    await prefs.setString('school_motto', _mottoController.text.trim());
-    await prefs.setString('school_republic', _republicController.text.trim());
-    await prefs.setString('school_director', _directeurController.text.trim());
-    await prefs.setString(
-      'school_director_primary',
-      _directeurPrimaireController.text.trim(),
-    );
-    await prefs.setString(
-      'school_director_college',
-      _directeurCollegeController.text.trim(),
-    );
-    await prefs.setString(
-      'school_director_lycee',
-      _directeurLyceeController.text.trim(),
-    );
-    await prefs.setString(
-      'school_director_university',
-      _directeurUniversityController.text.trim(),
-    );
-    await prefs.setString('school_civility_primary', _adminCivilityPrimary);
-    await prefs.setString('school_civility_college', _adminCivilityCollege);
-    await prefs.setString('school_civility_lycee', _adminCivilityLycee);
-    await prefs.setString(
-      'school_civility_university',
-      _adminCivilityUniversity,
-    );
-    await prefs.setString(
-      'school_code',
-      _codeEtablissementController.text.trim(),
-    );
-    await prefs.setString(
-      'school_level',
-      _niveauScolaireController.text.trim(),
-    );
-    await prefs.setString('school_ministry', _ministryController.text.trim());
-    await prefs.setString(
-      'school_republic_motto',
-      _republicMottoController.text.trim(),
-    );
-    await prefs.setString(
-      'school_education_direction',
-      _educationDirectionController.text.trim(),
-    );
-    await prefs.setString(
-      'school_inspection',
-      _inspectionController.text.trim(),
-    );
-    await prefs.setString(
-      'report_card_footer_note',
-      _reportFooterController.text.trim(),
-    );
-    await prefs.setString('school_slogan', _sloganController.text.trim());
-    await prefs.setBool('dark_mode', _isDarkMode);
-    await prefs.setBool('notifications', _notificationsEnabled);
-    await prefs.setBool('biometric', _biometricEnabled);
-    await prefs.setString('language', _selectedLanguage);
-    await prefs.setString('school_admin_civility', _adminCivility);
+    final settings = {
+      'school_name': _etablissementController.text.trim(),
+      'school_registration_fees': _registrationFeesController.text.trim(),
+      'school_address': _adresseController.text.trim(),
+      'school_bp': _bpController.text.trim(),
+      'school_phone': _telephoneController.text.trim(),
+      'school_email': _emailController.text.trim(),
+      'school_website': _siteWebController.text.trim(),
+      'school_motto': _mottoController.text.trim(),
+      'school_republic': _republicController.text.trim(),
+      'school_director': _directeurController.text.trim(),
+      'school_director_primary': _directeurPrimaireController.text.trim(),
+      'school_director_college': _directeurCollegeController.text.trim(),
+      'school_director_lycee': _directeurLyceeController.text.trim(),
+      'school_director_university': _directeurUniversityController.text.trim(),
+      'school_civility_primary': _adminCivilityPrimary,
+      'school_civility_college': _adminCivilityCollege,
+      'school_civility_lycee': _adminCivilityLycee,
+      'school_civility_university': _adminCivilityUniversity,
+      'school_code': _codeEtablissementController.text.trim(),
+      'school_level': _niveauScolaireController.text.trim(),
+      'school_ministry': _ministryController.text.trim(),
+      'school_republic_motto': _republicMottoController.text.trim(),
+      'school_education_direction': _educationDirectionController.text.trim(),
+      'school_inspection': _inspectionController.text.trim(),
+      'report_card_footer_note': _reportFooterController.text.trim(),
+      'school_slogan': _sloganController.text.trim(),
+      'academic_year': _academicYearController.text.trim(),
+      'school_admin_civility': _adminCivility,
+    };
 
-    if (_logoPath != null) {
-      await prefs.setString('school_logo', _logoPath!);
-    }
-    if (_flagPath != null) {
-      await prefs.setString('school_flag', _flagPath!);
-    }
-
-    // Keep DB in sync so PDFs reliably load logo and school details
+    setState(() => _isSyncing = true);
     try {
-      final info = SchoolInfo(
-        name: _etablissementController.text.trim(),
-        address: _adresseController.text.trim(),
-        bp: _bpController.text.trim(),
-        director: _directeurController.text.trim(),
-        directorPrimary: _directeurPrimaireController.text.trim(),
-        directorCollege: _directeurCollegeController.text.trim(),
-        directorLycee: _directeurLyceeController.text.trim(),
-        directorUniversity: _directeurUniversityController.text.trim(),
-        civilityPrimary: _adminCivilityPrimary,
-        civilityCollege: _adminCivilityCollege,
-        civilityLycee: _adminCivilityLycee,
-        civilityUniversity: _adminCivilityUniversity,
-        logoPath: _logoPath,
-        flagPath: _flagPath,
-        telephone: _telephoneController.text.trim(),
-        email: _emailController.text.trim(),
-        website: _siteWebController.text.trim(),
-        motto: _mottoController.text.trim(),
-        republic: _republicController.text.trim(),
-        ministry: _ministryController.text.trim(),
-        republicMotto: _republicMottoController.text.trim(),
-        educationDirection: _educationDirectionController.text.trim(),
-        inspection: _inspectionController.text.trim(),
-        slogan: _sloganController.text.trim(),
-        registrationFees: double.tryParse(
-          _registrationFeesController.text.trim(),
-        ),
-      );
-      await DatabaseService().insertSchoolInfo(info);
-    } catch (_) {}
+      final result = await SettingsSyncService.instance.upsertSettings(settings);
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('dark_mode', _isDarkMode);
+      await prefs.setBool('notifications', _notificationsEnabled);
+      await prefs.setBool('biometric', _biometricEnabled);
+      await prefs.setString('language', _selectedLanguage);
 
-    await _requestAcademicYearChange(
-      _academicYearController.text.trim(),
-      showSuccessSnackBar: false,
-    );
-    if (mounted) {
-      _showModernSnackBar(
-        'Configuration de l\'école sauvegardée avec succès !',
+      if (_logoPath != null) {
+        await prefs.setString('school_logo', _logoPath!);
+      }
+      if (_flagPath != null) {
+        await prefs.setString('school_flag', _flagPath!);
+      }
+
+      // Keep DB in sync so PDFs reliably load logo and school details
+      try {
+        final info = SchoolInfo(
+          name: _etablissementController.text.trim(),
+          address: _adresseController.text.trim(),
+          bp: _bpController.text.trim(),
+          director: _directeurController.text.trim(),
+          directorPrimary: _directeurPrimaireController.text.trim(),
+          directorCollege: _directeurCollegeController.text.trim(),
+          directorLycee: _directeurLyceeController.text.trim(),
+          directorUniversity: _directeurUniversityController.text.trim(),
+          civilityPrimary: _adminCivilityPrimary,
+          civilityCollege: _adminCivilityCollege,
+          civilityLycee: _adminCivilityLycee,
+          civilityUniversity: _adminCivilityUniversity,
+          logoPath: _logoPath,
+          flagPath: _flagPath,
+          telephone: _telephoneController.text.trim(),
+          email: _emailController.text.trim(),
+          website: _siteWebController.text.trim(),
+          motto: _mottoController.text.trim(),
+          republic: _republicController.text.trim(),
+          ministry: _ministryController.text.trim(),
+          republicMotto: _republicMottoController.text.trim(),
+          educationDirection: _educationDirectionController.text.trim(),
+          inspection: _inspectionController.text.trim(),
+          slogan: _sloganController.text.trim(),
+          registrationFees: double.tryParse(
+            _registrationFeesController.text.trim(),
+          ),
+        );
+        await DatabaseService().insertSchoolInfo(info);
+      } catch (_) {}
+
+      await _requestAcademicYearChange(
+        _academicYearController.text.trim(),
+        showSuccessSnackBar: false,
       );
+      if (mounted) {
+        _showModernSnackBar(
+          'Configuration de l\'école sauvegardée avec succès !',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showModernSnackBar('Erreur lors de la sauvegarde : $e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
     }
   }
 
@@ -3592,28 +3598,73 @@ class _SettingsPageState extends State<SettingsPage>
                           height: 1.5,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (_isFromRemote ? Colors.green : Colors.blueGrey)
+                              .withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: (_isFromRemote ? Colors.green : Colors.blueGrey)
+                                .withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _isFromRemote
+                                  ? Icons.cloud_done_rounded
+                                  : Icons.storage_rounded,
+                              size: 14,
+                              color:
+                                  _isFromRemote ? Colors.green : Colors.blueGrey,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _isFromRemote
+                                  ? 'Source : Cloud ☁️'
+                                  : 'Source : Local 💾',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _isFromRemote
+                                    ? Colors.green
+                                    : Colors.blueGrey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ],
               ),
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.cardColor,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  Icons.notifications_outlined,
-                  color: theme.iconTheme.color,
-                  size: 20,
-                ),
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Synchroniser',
+                    onPressed: _isSyncing
+                        ? null
+                        : () => _loadSchoolSettings(forceRemote: true),
+                    icon: _isSyncing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            Icons.sync,
+                            color: theme.iconTheme.color,
+                            size: 24,
+                          ),
+                  ),
+                  const NotificationBell(),
+                ],
               ),
             ],
           ),

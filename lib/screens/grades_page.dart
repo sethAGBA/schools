@@ -1675,7 +1675,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
   Future<void> _loadAllData() async {
     setState(() => isLoading = true);
-    
+
     // Try remote first for classes
     try {
       final remoteClasses = await RemoteAcademicsService.instance.listClasses(
@@ -2042,7 +2042,7 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       _gradeDrafts[student.id] = note.toString();
     }
     if (mounted) setState(() {});
-    
+
     _syncGradeToRemote(
       studentId: student.id,
       subjectName: selectedSubject!,
@@ -2058,15 +2058,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
     try {
       final className = selectedClass ?? '';
       final academicYear = selectedAcademicYear ?? academicYearNotifier.value;
-      
+
       final allGrades = await _dbService.getGradesForStudent(
         studentId: studentId,
         className: className,
         academicYear: academicYear,
         term: period,
       );
-      
-      final subjectGrades = allGrades.where((g) => g.subject == subjectName).toList();
+
+      final subjectGrades = allGrades
+          .where((g) => g.subject == subjectName)
+          .toList();
       if (subjectGrades.isEmpty) return;
 
       final devoirs = subjectGrades.where((g) => g.type == 'Devoir').toList();
@@ -2080,7 +2082,9 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
         devoirAvg = coeffs > 0 ? total / coeffs : 0;
       }
 
-      final compositions = subjectGrades.where((g) => g.type == 'Composition').toList();
+      final compositions = subjectGrades
+          .where((g) => g.type == 'Composition')
+          .toList();
       double? compoNote;
       if (compositions.isNotEmpty) {
         double total = 0, coeffs = 0;
@@ -2101,7 +2105,9 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
       final String? comment = appData?['appreciation'];
       final String? classAvgStr = appData?['moyenne_classe'];
-      final double? classAvg = double.tryParse(classAvgStr?.replaceAll(',', '.') ?? '');
+      final double? classAvg = double.tryParse(
+        classAvgStr?.replaceAll(',', '.') ?? '',
+      );
 
       double total = 0, coeffs = 0;
       for (final g in subjectGrades) {
@@ -2110,9 +2116,14 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       }
       final double? subjectAvg = coeffs > 0 ? total / coeffs : null;
 
-      final course = subjects.firstWhere((c) => c.name == subjectName, orElse: () => Course.empty());
+      final course = subjects.firstWhere(
+        (c) => c.name == subjectName,
+        orElse: () => Course.empty(),
+      );
       if (course.id.isEmpty || !course.id.contains('-')) {
-        debugPrint('[GradesPage] Skipping sync: subjectId is not a GUID: ${course.id}');
+        debugPrint(
+          '[GradesPage] Skipping sync: subjectId is not a GUID: ${course.id}',
+        );
         return;
       }
 
@@ -2130,7 +2141,6 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
       debugPrint('[GradesPage] Error in _syncGradeToRemote: $e');
     }
   }
-
 
   ThemeData _buildLightTheme() {
     return ThemeData(
@@ -2297,7 +2307,8 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                         : () async {
                             setState(() => _syncing = true);
                             try {
-                              final r = await AcademicsSyncService.instance.syncPending();
+                              final r = await AcademicsSyncService.instance
+                                  .syncPending();
                               await _loadAllData();
                               if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -7835,11 +7846,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       final studentName =
                                           '${student.firstName}_${student.lastName}';
                                       final safeStudentName =
-                                          PdfService.sanitizeFileName(studentName);
+                                          PdfService.sanitizeFileName(
+                                            studentName,
+                                          );
                                       final fileName =
                                           'Bulletin_compact_${safeStudentName}_${(selectedTerm ?? '').replaceAll(' ', '_')}_${(selectedAcademicYear ?? '').replaceAll('/', '_')}.pdf';
-                                      final file = File('$directoryPath/$fileName');
-                                      await PdfService.ensureParentDirectory(file);
+                                      final file = File(
+                                        '$directoryPath/$fileName',
+                                      );
+                                      await PdfService.ensureParentDirectory(
+                                        file,
+                                      );
                                       await file.writeAsBytes(pdfBytes);
                                       ScaffoldMessenger.of(
                                         context,
@@ -8095,11 +8112,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       final studentName =
                                           '${student.firstName}_${student.lastName}';
                                       final safeStudentName =
-                                          PdfService.sanitizeFileName(studentName);
+                                          PdfService.sanitizeFileName(
+                                            studentName,
+                                          );
                                       final fileName =
                                           'Bulletin_ultra_compact_${safeStudentName}_${(selectedTerm ?? '').replaceAll(' ', '_')}_${(selectedAcademicYear ?? '').replaceAll('/', '_')}.pdf';
-                                      final file = File('$directoryPath/$fileName');
-                                      await PdfService.ensureParentDirectory(file);
+                                      final file = File(
+                                        '$directoryPath/$fileName',
+                                      );
+                                      await PdfService.ensureParentDirectory(
+                                        file,
+                                      );
                                       await file.writeAsBytes(pdfBytes);
                                       ScaffoldMessenger.of(
                                         context,
@@ -8336,11 +8359,17 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
                                       final studentName =
                                           '${student.firstName}_${student.lastName}';
                                       final safeStudentName =
-                                          PdfService.sanitizeFileName(studentName);
+                                          PdfService.sanitizeFileName(
+                                            studentName,
+                                          );
                                       final fileName =
                                           'Bulletin_${safeStudentName}_${(selectedTerm ?? '').replaceAll(' ', '_')}_${(selectedAcademicYear ?? '').replaceAll('/', '_')}.pdf';
-                                      final file = File('$directoryPath/$fileName');
-                                      await PdfService.ensureParentDirectory(file);
+                                      final file = File(
+                                        '$directoryPath/$fileName',
+                                      );
+                                      await PdfService.ensureParentDirectory(
+                                        file,
+                                      );
                                       await file.writeAsBytes(pdfBytes);
                                       ScaffoldMessenger.of(
                                         context,
@@ -11570,8 +11599,8 @@ class _GradesPageState extends State<GradesPage> with TickerProviderStateMixin {
 
     // Charger les notes et les matières directement depuis la base de données
     // (Les listes 'grades' et 'subjects' en mémoire peuvent être incomplètes lors d'un export massif)
-    final List<Grade> allGradesForPeriod = (await _dbService
-        .getAllGradesForPeriod(
+    final List<Grade> allGradesForPeriod =
+        (await _dbService.getAllGradesForPeriod(
           className: selectedClass!,
           academicYear: effectiveYear,
           term: selectedTerm!,

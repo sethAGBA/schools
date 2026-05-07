@@ -3,8 +3,12 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:school_manager/models/category.dart';
 import 'package:school_manager/services/database_service.dart';
+import 'package:school_manager/services/categories_sync_service.dart';
+import 'package:school_manager/widgets/notification_center.dart';
+import 'package:school_manager/services/api/token_storage_service.dart';
 import 'package:school_manager/screens/students/widgets/custom_dialog.dart';
 import 'package:school_manager/screens/students/widgets/form_field.dart';
+import 'package:school_manager/utils/snackbar.dart';
 
 class CategoriesPage extends StatefulWidget {
   const CategoriesPage({Key? key}) : super(key: key);
@@ -20,8 +24,10 @@ class _CategoriesPageState extends State<CategoriesPage>
   bool _loading = true;
   late AnimationController _anim;
   late Animation<double> _fade;
-  final _searchController = TextEditingController();
+   final _searchController = TextEditingController();
   String _query = '';
+  bool _isFromRemote = false;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -46,13 +52,38 @@ class _CategoriesPageState extends State<CategoriesPage>
   }
 
   Future<void> _load() async {
+    if (mounted) {
+      showSnackBar(context, 'Synchronisation des catégories en cours...');
+    }
     setState(() => _loading = true);
-    final list = await _db.getCategories();
-    setState(() {
-      _categories = list;
-      _loading = false;
-    });
-    _anim.forward();
+    try {
+      final result = await CategoriesSyncService.instance.loadCategories();
+      setState(() {
+        _categories = result.categories;
+        _isFromRemote = result.fromRemote;
+      });
+      if (mounted) {
+        showSnackBar(
+          context,
+          _isFromRemote 
+            ? 'Catégories synchronisées avec le Cloud ☁️' 
+            : 'Catégories chargées depuis le stockage local 💾'
+        );
+      }
+      _anim.forward();
+    } catch (e) {
+      if (mounted) {
+        showSnackBar(
+          context,
+          'Erreur lors du chargement : ${e.toString().contains('503') ? 'Serveur indisponible' : 'Vérifiez votre connexion'}',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
   }
 
   Future<void> _showAddEditDialog({Category? category}) async {
@@ -176,7 +207,8 @@ class _CategoriesPageState extends State<CategoriesPage>
                 color: colorHex,
                 order: order,
               );
-              await _db.updateCategory(category.id, updated);
+              await CategoriesSyncService.instance.upsertCategory(updated, isUpdate: true);
+              if (mounted) showSnackBar(context, 'Catégorie mise à jour.');
             } else {
               final exists = _categories.any(
                 (c) => c.name.toLowerCase() == name.toLowerCase(),
@@ -194,7 +226,8 @@ class _CategoriesPageState extends State<CategoriesPage>
                 color: colorHex,
                 order: order,
               );
-              await _db.insertCategory(created);
+              await CategoriesSyncService.instance.upsertCategory(created, isUpdate: false);
+              if (mounted) showSnackBar(context, 'Catégorie ajoutée avec succès !');
             }
             await _load();
             if (mounted) Navigator.of(context).pop();
@@ -231,7 +264,8 @@ class _CategoriesPageState extends State<CategoriesPage>
                     ),
                   );
                   if (confirm == true) {
-                    await _db.deleteCategory(category.id);
+                    await CategoriesSyncService.instance.deleteCategory(category);
+                    if (mounted) showSnackBar(context, 'Catégorie supprimée.', isError: true);
                     await _load();
                     if (mounted) Navigator.of(context).pop();
                   }
@@ -258,7 +292,8 @@ class _CategoriesPageState extends State<CategoriesPage>
                     color: colorHex,
                     order: order,
                   );
-                  await _db.updateCategory(category.id, updated);
+                  await CategoriesSyncService.instance.upsertCategory(updated, isUpdate: true);
+                  if (mounted) showSnackBar(context, 'Catégorie mise à jour.');
                 } else {
                   final exists = _categories.any(
                     (c) => c.name.toLowerCase() == name.toLowerCase(),
@@ -278,7 +313,8 @@ class _CategoriesPageState extends State<CategoriesPage>
                     color: colorHex,
                     order: order,
                   );
-                  await _db.insertCategory(created);
+                  await CategoriesSyncService.instance.upsertCategory(created, isUpdate: false);
+                  if (mounted) showSnackBar(context, 'Catégorie ajoutée avec succès !');
                 }
                 await _load();
                 if (mounted) Navigator.of(context).pop();
@@ -441,7 +477,7 @@ class _CategoriesPageState extends State<CategoriesPage>
                                       ),
                                     );
                                     if (confirm == true) {
-                                      await _db.deleteCategory(c.id);
+                                      await CategoriesSyncService.instance.deleteCategory(c);
                                       await _load();
                                     }
                                   },
@@ -509,6 +545,27 @@ class _CategoriesPageState extends State<CategoriesPage>
                   ),
                 ],
               ),
+            ],
+          ),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Synchroniser',
+                onPressed: _loading ? null : _load,
+                icon: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        Icons.sync,
+                        color: theme.iconTheme.color,
+                        size: 24,
+                      ),
+              ),
+              const SizedBox(width: 8),
+              const NotificationBell(),
             ],
           ),
         ],
