@@ -141,10 +141,16 @@ builder.Services.AddDbContext<SchoolDbContext>((serviceProvider, options) =>
 
     options.UseNpgsql(postgresOptions.ConnectionString);
 });
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+});
 builder.Services.AddControllers();
 builder.Services.AddHostedService<DbInitializer>();
 
 var app = builder.Build();
+
+app.UseResponseCompression();
 
 app.UseHttpsRedirection();
 if (!app.Environment.IsDevelopment())
