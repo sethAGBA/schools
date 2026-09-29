@@ -9,4 +9,6 @@ public record CreateSubjectRequest(
 
 public record UpdateSubjectRequest(
     [Required] string Name,
-    [Range(0.1, 50)] double Coefficient);
+    [Range(0.1, 50)] double Coefficient,
+    [Required] Guid ClassRoomId,
+    Guid? CategoryId);

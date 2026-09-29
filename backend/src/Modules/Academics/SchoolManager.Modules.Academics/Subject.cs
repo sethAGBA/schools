@@ -9,7 +9,8 @@ public sealed class Subject : ITenantEntity
     public string Name { get; set; } = string.Empty;
     public double Coefficient { get; set; } = 1.0;
     public Guid ClassRoomId { get; set; }
-    
+    public Guid? CategoryId { get; set; }
+
     // Navigation property (optional, but useful if we add it to DbContext)
     // public ClassRoom? ClassRoom { get; set; }
 

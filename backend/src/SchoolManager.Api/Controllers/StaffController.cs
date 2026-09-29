@@ -37,6 +37,54 @@ public sealed class StaffController(SchoolDbContext dbContext, IAuditLogger audi
         return Ok(staff);
     }
 
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetStaffById(Guid id, CancellationToken cancellationToken)
+    {
+        var staff = await dbContext.StaffMembers
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (staff is null)
+        {
+            return NotFound(new { error = "Personnel introuvable." });
+        }
+
+        return Ok(staff);
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> DeleteStaff(Guid id, CancellationToken cancellationToken)
+    {
+        var staff = await dbContext.StaffMembers
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (staff is null)
+        {
+            return NotFound(new { error = "Personnel introuvable." });
+        }
+
+        if (staff.Status == "Inactif")
+        {
+            return NoContent();
+        }
+
+        staff.Status = "Inactif";
+        staff.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogger.LogAsync(
+            action: "staff.deactivated",
+            targetType: "Staff",
+            targetId: staff.Id.ToString(),
+            targetTenantId: staff.TenantId,
+            metadata: new { staff.Name, staff.Role, staff.Status },
+            cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpPost("bulk")]
     public async Task<IActionResult> BulkUpsertStaff([FromBody] BulkUpdateStaffRequest request, CancellationToken cancellationToken)
     {

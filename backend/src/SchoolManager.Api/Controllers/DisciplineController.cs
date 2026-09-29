@@ -14,16 +14,16 @@ public sealed class DisciplineController(SchoolDbContext dbContext, IAuditLogger
 {
     [HttpGet("attendance")]
     public async Task<IActionResult> ListAttendance(
-        [FromQuery] string? studentId,
+        [FromQuery] Guid? studentId,
         [FromQuery] string? academicYear,
         [FromQuery] string? className,
         CancellationToken cancellationToken)
     {
         var query = dbContext.AttendanceEvents.AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(studentId))
+        if (studentId.HasValue)
         {
-            query = query.Where(x => x.StudentId == studentId);
+            query = query.Where(x => x.StudentId == studentId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(academicYear))
@@ -98,16 +98,16 @@ public sealed class DisciplineController(SchoolDbContext dbContext, IAuditLogger
 
     [HttpGet("sanctions")]
     public async Task<IActionResult> ListSanctions(
-        [FromQuery] string? studentId,
+        [FromQuery] Guid? studentId,
         [FromQuery] string? academicYear,
         [FromQuery] string? className,
         CancellationToken cancellationToken)
     {
         var query = dbContext.SanctionEvents.AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(studentId))
+        if (studentId.HasValue)
         {
-            query = query.Where(x => x.StudentId == studentId);
+            query = query.Where(x => x.StudentId == studentId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(academicYear))
@@ -204,7 +204,7 @@ public class BulkUpdateAttendanceRequest
 
 public class AttendanceEventDto
 {
-    public string StudentId { get; set; } = string.Empty;
+    public Guid StudentId { get; set; }
     public string AcademicYear { get; set; } = string.Empty;
     public string ClassName { get; set; } = string.Empty;
     public string Date { get; set; } = string.Empty;
@@ -222,7 +222,7 @@ public class BulkUpdateSanctionsRequest
 
 public class SanctionEventDto
 {
-    public string StudentId { get; set; } = string.Empty;
+    public Guid StudentId { get; set; }
     public string AcademicYear { get; set; } = string.Empty;
     public string ClassName { get; set; } = string.Empty;
     public string Date { get; set; } = string.Empty;

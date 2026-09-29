@@ -226,6 +226,10 @@ namespace SchoolManager.Api.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
                     b.Property<Guid>("ClassRoomId")
                         .HasColumnType("uuid")
                         .HasColumnName("class_room_id");
@@ -255,6 +259,8 @@ namespace SchoolManager.Api.Data.Migrations
                         .HasColumnName("updated_at_utc");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
 
                     b.HasIndex("TenantId", "ClassRoomId");
 
@@ -1217,6 +1223,14 @@ namespace SchoolManager.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SchoolManager.Modules.Academics.Subject", b =>
+                {
+                    b.HasOne("SchoolManager.Modules.Academics.SubjectCategory", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("SchoolManager.Modules.Identity.Domain.AppUser", b =>

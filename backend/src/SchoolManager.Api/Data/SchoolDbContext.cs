@@ -182,8 +182,15 @@ public sealed class SchoolDbContext(DbContextOptions<SchoolDbContext> options, I
             entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(150).IsRequired();
             entity.Property(x => x.Coefficient).HasColumnName("coefficient").IsRequired();
             entity.Property(x => x.ClassRoomId).HasColumnName("class_room_id").IsRequired();
+            entity.Property(x => x.CategoryId).HasColumnName("category_id");
             entity.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
             entity.Property(x => x.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+
+            entity.HasOne<SubjectCategory>()
+                .WithMany()
+                .HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .IsRequired(false);
 
             entity.HasIndex(x => new { x.TenantId, x.ClassRoomId });
             entity.HasQueryFilter(x => _tenantContext.TenantId == null || x.TenantId == _tenantContext.TenantId);
